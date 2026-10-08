@@ -384,7 +384,7 @@ export default function PartnerHomePage() {
               <TouchableOpacity
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setTimeout(() => router.replace("/c/home" as any), 140);
+                  router.replace("/c/home" as any);
                 }}
                 activeOpacity={0.8}
                 className="flex-1 py-2 rounded-full flex-row items-center justify-center gap-1.5 z-10"

@@ -240,8 +240,7 @@ export default function ClientHomePage() {
                   <TouchableOpacity
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setActiveSegment("tawarkan");
-                      setTimeout(() => router.replace("/p/home" as any), 140);
+                      router.replace("/p/home" as any);
                     }}
                     activeOpacity={0.9}
                     className="flex-1 py-2 rounded-full flex-row items-center justify-center gap-1.5 z-10"
@@ -349,7 +348,13 @@ export default function ClientHomePage() {
                 </View>
 
                 {loading && !refreshing ? (
-                  <ActivityIndicator color="#ff6b00" className="py-4" />
+                  // Show a lightweight skeleton placeholder instead of a big spinner
+                  <View className="flex-row gap-2 px-4 py-4">
+                    {/* 3‑item carousel skeleton */}
+                    {[1,2,3].map((i) => (
+                      <View key={i} className="w-36 h-36 bg-gray-200 rounded-xl" />
+                    ))}
+                  </View>
                 ) : (availableProviders ?? filteredProviders).length === 0 ? (
                   <View className="mx-4 bg-gray-100 rounded-xl p-5 items-center justify-center border border-dashed border-gray-300">
                     <Text className="text-2xl opacity-50">🌍</Text>

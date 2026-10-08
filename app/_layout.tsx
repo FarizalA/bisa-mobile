@@ -40,7 +40,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SupabaseProvider>
         <PopupProvider>
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack screenOptions={{ headerShown: false, animation: "none" }} />
         </PopupProvider>
       </SupabaseProvider>
     </SafeAreaProvider>

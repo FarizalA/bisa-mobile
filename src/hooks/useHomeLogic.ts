@@ -7,6 +7,11 @@ import { getStoredUser } from "../lib/user-storage";
 import { ProviderItem } from "../components/home/ProviderCard";
 import { ensureConversationAndNavigate } from "../lib/chatInbox";
 
+// Memory cache biar Beranda tidak download ulang tiap balik halaman (hemat kuota & anti muter)
+let _cachedProviders: ProviderItem[] | null = null;
+let _cachedAt = 0;
+const CACHE_TTL = 2 * 60 * 1000; // 2 menit
+
 export function useHomeLogic() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -94,9 +99,18 @@ export function useHomeLogic() {
     initSession();
   }, []);
 
-  // Fetch Providers from Supabase
-  const fetchProviders = useCallback(async () => {
-    setLoading(true);
+  // Fetch Providers from Supabase (cache 2 menit — hemat loading & kuota)
+  const fetchProviders = useCallback(async (opts?: { silent?: boolean }) => {
+    const isCacheValid = _cachedProviders && Date.now() - _cachedAt < CACHE_TTL;
+    // Kalau ada cache valid & bukan silent, tampilkan cache dulu tanpa loading spinner
+    if (isCacheValid && !opts?.silent) {
+      setProviders(_cachedProviders!);
+      setLoading(false);
+      // Tetap fetch silent di background untuk update diam-diam
+      fetchProviders({ silent: true });
+      return;
+    }
+    if (!opts?.silent) setLoading(true);
     try {
       const lat = userCoords?.lat || -7.311;
       const lng = userCoords?.lng || 108.764;
@@ -133,6 +147,8 @@ export function useHomeLogic() {
           status: p.status,
           face_url: p.face_url && p.face_url.startsWith("http") ? p.face_url : null,
         }));
+        _cachedProviders = enriched;
+        _cachedAt = Date.now();
         setProviders(enriched);
         return;
       }
@@ -189,6 +205,8 @@ export function useHomeLogic() {
           };
         });
 
+        _cachedProviders = enriched;
+        _cachedAt = Date.now();
         setProviders(enriched);
       }
     } catch (err) {
@@ -204,6 +222,8 @@ export function useHomeLogic() {
   }, [user, fetchProviders]);
 
   const onRefresh = () => {
+    _cachedProviders = null;
+    _cachedAt = 0;
     setRefreshing(true);
     fetchProviders();
   };
