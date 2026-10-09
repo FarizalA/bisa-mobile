@@ -41,16 +41,17 @@ let Circle: any = null;
 let Callout: any = null;
 let mapsLoadError: string | null = null;
 if (Platform.OS !== "web") {
-  try {
-    const Maps = require("react-native-maps");
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Circle = Maps.Circle;
-    Callout = Maps.Callout;
-  } catch (e: any) {
-    mapsLoadError = e?.message || "maps unavailable";
-    MapView = null;
-  }
+  // try {
+  //   const Maps = require("react-native-maps");
+  //   MapView = Maps.default;
+  //   Marker = Maps.Marker;
+  //   Circle = Maps.Circle;
+  //   Callout = Maps.Callout;
+  // } catch (e: any) {
+  //   mapsLoadError = e?.message || "maps unavailable";
+  //   MapView = null;
+  // }
+  MapView = null; // Memaksa fallback ke WebView (Leaflet) untuk mencegah Force Close (FC)
 }
 
 const KATEGORI_JASA = [

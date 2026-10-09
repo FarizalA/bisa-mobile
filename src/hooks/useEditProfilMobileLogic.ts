@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import { getStoredUser, setStoredUser } from "../lib/user-storage";
+import { compressImage } from "../lib/imageCompression";
 import { safeBack } from "@/lib/navigation";
 
 export interface Service {
@@ -175,12 +176,13 @@ export function useEditProfilMobileLogic() {
         if (!cam.canceled) picked = cam;
       }
       if (picked.canceled || !picked.assets?.[0]) return;
-      const uri = picked.assets[0].uri;
+      let uri = picked.assets[0].uri;
       if (picked.assets[0].fileSize && picked.assets[0].fileSize > 5 * 1024 * 1024) {
         Alert.alert("File Terlalu Besar", "Maksimal 5 MB");
         return;
       }
       setUploadingImage(true);
+      uri = await compressImage(uri);
       const ext = extFromUri(uri);
       const mime = mimeFromExt(ext);
       const ab = await uriToArrayBuffer(uri);
@@ -208,8 +210,9 @@ export function useEditProfilMobileLogic() {
       }
       const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
       if (res.canceled || !res.assets?.[0]) return;
-      const uri = res.assets[0].uri;
+      let uri = res.assets[0].uri;
       setUploadingImage(true);
+      uri = await compressImage(uri);
       const ext = extFromUri(uri);
       const mime = mimeFromExt(ext);
       const ab = await uriToArrayBuffer(uri);
@@ -250,7 +253,7 @@ export function useEditProfilMobileLogic() {
           Alert.alert("Skip", `${a.fileName || "Foto"} melebihi 5 MB — dilewati`);
           continue;
         }
-        const uri = a.uri;
+        const uri = await compressImage(a.uri);
         const ext = extFromUri(uri);
         const mime = mimeFromExt(ext);
         const ab = await uriToArrayBuffer(uri);
@@ -363,7 +366,7 @@ export function useEditProfilMobileLogic() {
     try {
       const uploadedUrls: string[] = [];
       for (let i = 0; i < pendingPortfolioUris.length; i++) {
-        const uri = pendingPortfolioUris[i];
+        const uri = await compressImage(pendingPortfolioUris[i]);
         const ext = extFromUri(uri);
         const mime = mimeFromExt(ext);
         const ab = await uriToArrayBuffer(uri);

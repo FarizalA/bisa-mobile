@@ -9,6 +9,7 @@ import { getStoredUser } from "../lib/user-storage";
 import { containsPhoneNumber } from "../lib/chatSecurity";
 import { parseOrderContent } from "../lib/chatHelpers";
 import { usePopup } from "../components/PopupProvider.native";
+import { compressImage } from "../lib/imageCompression";
 
 // Re-export helpers for convenience
 export { formatBudget, parseOrderContent } from "../lib/chatHelpers";
@@ -211,12 +212,16 @@ export function useChatLogic(conversationId: string) {
       if (!result.canceled && result.assets[0]?.uri) {
         setUploading(true);
         const asset = result.assets[0];
+        
+        // Kompres gambar sebelum diunggah
+        const compressedUri = await compressImage(asset.uri, 1080, 0.7);
+
         const ext = (asset.fileName || asset.uri).split(".").pop() || "jpg";
         const fileName = `${conversationId}_${Date.now()}.${ext}`;
         const filePath = `chat_images/${fileName}`;
 
         // Cross-platform binary upload for Supabase Storage (Web & React Native Compatible)
-        const response = await fetch(asset.uri);
+        const response = await fetch(compressedUri);
         const blob = await response.blob();
 
         const { error: upErr } = await supabase.storage

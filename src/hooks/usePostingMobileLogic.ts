@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
+import { compressImage } from "../lib/imageCompression";
 
 const LIST_RADIUS = ["Maks. 1 km", "Maks. 3 km", "Maks. 5 km", "Maks. 10 km", "Maks. 25 km", "Seluruh Kota"];
 export type DeadlineOpt = { name: string; desc: string; urgent: boolean };
@@ -196,7 +197,17 @@ export function usePostingMobileLogic() {
     if (res.canceled || !res.assets?.[0]) return;
     const a = res.assets[0];
     if ((a.fileSize||0) > 8*1024*1024) { Alert.alert("File Besar", "Maks 8 MB"); return; }
-    setFotoUri(a.uri); setFotoPreview(a.uri);
+    
+    setUploadingFoto(true);
+    try {
+      const uri = await compressImage(a.uri);
+      setFotoUri(uri); setFotoPreview(uri);
+    } catch (error) {
+      console.error("Gagal kompresi foto:", error);
+      setFotoUri(a.uri); setFotoPreview(a.uri);
+    } finally {
+      setUploadingFoto(false);
+    }
   };
   const removeFoto = () => { setFotoUri(null); setFotoPreview(null); };
 

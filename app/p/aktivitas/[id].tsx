@@ -34,6 +34,7 @@ import { supabase } from "../../../src/lib/supabase";
 import { getStoredUser } from "../../../src/lib/user-storage";
 import { formatRupiah } from "../../../src/lib/payment";
 import { safeBack } from "@/lib/navigation";
+import { compressImage } from "../../../src/lib/imageCompression";
 
 interface JobDetail {
   id: number;
@@ -362,7 +363,13 @@ export default function MitraOrderDetailPage() {
         quality: 0.8,
       });
       if (!res.canceled && res.assets[0]?.uri) {
-        setDeliveryImageUri(res.assets[0].uri);
+        let uri = res.assets[0].uri;
+        try {
+          uri = await compressImage(uri);
+        } catch (error) {
+          console.error("Gagal kompresi foto:", error);
+        }
+        setDeliveryImageUri(uri);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
     } catch (e: any) {
