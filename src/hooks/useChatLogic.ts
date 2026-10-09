@@ -186,14 +186,30 @@ export function useChatLogic(conversationId: string) {
     if (!newMessage.trim() || isChatLocked) return;
     const content = newMessage.trim();
     const sec = containsPhoneNumber(content);
-    if (sec.isForbidden) { Alert.alert("Keamanan Transaksi BISA", sec.reason || "Nomor telepon / kontak dilarang dikirim."); return; }
+    if (sec.isForbidden) {
+      showPopup({
+        title: "Keamanan Transaksi BISA",
+        message: sec.reason || "Nomor telepon / kontak dilarang dikirim demi keamanan bersama.",
+        type: "warning",
+        theme: isMitraView ? "provider" : "client",
+      });
+      return;
+    }
     setNewMessage("");
     try {
       const { data, error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: Number(myUserId), content, message_type: "text" }).select().single();
       if (error) throw error;
       if (data) setMessages(prev => [...prev, data]);
       await updateLastMessage(content);
-    } catch (e: any) { Alert.alert("Gagal Mengirim", e.message); setNewMessage(content); }
+    } catch (e: any) {
+      showPopup({
+        title: "Gagal Mengirim",
+        message: e.message || "Pesan gagal terkirim.",
+        type: "error",
+        theme: isMitraView ? "provider" : "client",
+      });
+      setNewMessage(content);
+    }
   };
 
   const pickImage = async (useCamera = false) => {
@@ -202,11 +218,17 @@ export function useChatLogic(conversationId: string) {
       let result;
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") { Alert.alert("Izin Ditolak", "Izin kamera diperlukan"); return; }
+        if (status !== "granted") {
+          showPopup({ title: "Izin Ditolak", message: "Izin kamera diperlukan untuk mengambil foto.", type: "warning", theme: isMitraView ? "provider" : "client" });
+          return;
+        }
         result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") { Alert.alert("Izin Ditolak", "Izin galeri diperlukan"); return; }
+        if (status !== "granted") {
+          showPopup({ title: "Izin Ditolak", message: "Izin akses galeri diperlukan.", type: "warning", theme: isMitraView ? "provider" : "client" });
+          return;
+        }
         result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
       }
       if (!result.canceled && result.assets[0]?.uri) {
@@ -239,7 +261,12 @@ export function useChatLogic(conversationId: string) {
         await updateLastMessage("📷 Foto");
       }
     } catch (e: any) {
-      Alert.alert("Gagal Upload Gambar", e.message || "Gagal mengunggah foto ke server");
+      showPopup({
+        title: "Gagal Upload Gambar",
+        message: e.message || "Gagal mengunggah foto ke server.",
+        type: "error",
+        theme: isMitraView ? "provider" : "client",
+      });
     } finally {
       setUploading(false);
     }
@@ -249,13 +276,18 @@ export function useChatLogic(conversationId: string) {
     try {
       setShowAttachments(false);
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { Alert.alert("Izin Ditolak", "Izin lokasi diperlukan"); return; }
+      if (status !== "granted") {
+        showPopup({ title: "Izin Ditolak", message: "Izin lokasi diperlukan.", type: "warning", theme: isMitraView ? "provider" : "client" });
+        return;
+      }
       const loc = await Location.getCurrentPositionAsync({});
       const url = `https://www.google.com/maps?q=${loc.coords.latitude},${loc.coords.longitude}`;
       const text = `📍 Lokasi Saya: ${url}`;
       await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: Number(myUserId), content: text, message_type: "location" });
       await updateLastMessage("📍 Lokasi");
-    } catch (e: any) { Alert.alert("Gagal Lokasi", e.message); }
+    } catch (e: any) {
+      showPopup({ title: "Gagal Lokasi", message: e.message, type: "error", theme: isMitraView ? "provider" : "client" });
+    }
   };
 
   const createOffer = async (amountStr: string) => {
@@ -289,9 +321,12 @@ export function useChatLogic(conversationId: string) {
       await supabase.from("conversations").update({ job_id: job.id }).eq("id", conversationId);
       await updateLastMessage(`📋 Pesanan: ${judul}`);
       setShowInvoiceModal(false);
-      Alert.alert("Invoice Terkirim", "Kartu pesanan escrow berhasil dikirim!");
-    } catch (e: any) { Alert.alert("Gagal", e.message); }
-    finally { setSendingInvoice(false); }
+      showPopup({ title: "Invoice Terkirim", message: "Kartu pesanan escrow berhasil dikirim!", type: "success", theme: isMitraView ? "provider" : "client" });
+    } catch (e: any) {
+      showPopup({ title: "Gagal", message: e.message, type: "error", theme: isMitraView ? "provider" : "client" });
+    } finally {
+      setSendingInvoice(false);
+    }
   };
 
   const choosePayment = async (method: "MIDTRANS" | "COD") => {
@@ -302,10 +337,13 @@ export function useChatLogic(conversationId: string) {
       try {
         await supabase.from("pekerjaan_bisa").update({ metode_pembayaran: "cod", payment_method: "COD", status: "sedang_dikerjakan" }).eq("id", Number(payJobId));
         setShowPaySheet(false);
-        Alert.alert("COD Dipilih", "Status → Sedang Dikerjakan. Bayar tunai setelah selesai.");
+        showPopup({ title: "COD Dipilih", message: "Status → Sedang Dikerjakan. Bayar tunai setelah pekerjaan selesai.", type: "success", theme: isMitraView ? "provider" : "client" });
         fetchAll();
-      } catch (e: any) { Alert.alert("Gagal", e.message); }
-      finally { setPayingCod(false); }
+      } catch (e: any) {
+        showPopup({ title: "Gagal", message: e.message, type: "error", theme: isMitraView ? "provider" : "client" });
+      } finally {
+        setPayingCod(false);
+      }
       return;
     }
     // MIDTRANS — 1:1 web handleChoosePayment: minta Snap token lalu buka paymentUrl (mobile pakai Linking)
@@ -317,7 +355,7 @@ export function useChatLogic(conversationId: string) {
       } catch {}
     }
     if (!priceNum) {
-      Alert.alert("Gagal", "Nominal harga tidak valid.");
+      showPopup({ title: "Gagal Pembayaran", message: "Nominal harga tidak valid.", type: "error", theme: isMitraView ? "provider" : "client" });
       return;
     }
     setPayingOnline(true);

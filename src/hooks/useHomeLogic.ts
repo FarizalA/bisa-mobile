@@ -42,33 +42,37 @@ export function useHomeLogic() {
     const initSession = async () => {
       try {
         const stored = await getStoredUser();
-        if (!stored || !stored.id) {
-          router.replace("/(auth)/login" as any);
-          return;
-        }
+        if (stored && stored.id) {
+          // 1. Set dari local storage dulu agar UI tidak nunggu lama (optimistic UI)
+          setUser(stored);
+          if (stored?.alamat_singkat) {
+            setLocationName(stored.alamat_singkat);
+          }
 
-        // Fetch fresh user data from Supabase
-        const { data: freshUser } = await supabase
-          .from("users_bisa")
-          .select("*")
-          .eq("id", stored.id)
-          .single();
+          // 2. Fetch fresh user data dari Supabase (berjalan di background)
+          const { data: freshUser } = await supabase
+            .from("users_bisa")
+            .select("*")
+            .eq("id", stored.id)
+            .single();
 
-        const activeUser = freshUser || stored;
-        setUser(activeUser);
-        if (activeUser?.alamat_singkat) {
-          setLocationName(activeUser.alamat_singkat);
-        }
+          if (freshUser) {
+            setUser(freshUser);
+            if (freshUser.alamat_singkat) {
+              setLocationName(freshUser.alamat_singkat);
+            }
+          }
 
-        // Fetch unread notifications count
-        const { count: unreadCount } = await supabase
-          .from("notifikasi_bisa")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", stored.id)
-          .eq("is_read", false);
+          // Fetch unread notifications count
+          const { count: unreadCount } = await supabase
+            .from("notifikasi_bisa")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", stored.id)
+            .eq("is_read", false);
 
-        if (unreadCount !== null) {
-          setUnreadNotifCount(unreadCount);
+          if (unreadCount !== null) {
+            setUnreadNotifCount(unreadCount);
+          }
         }
 
         // GPS Geolocation

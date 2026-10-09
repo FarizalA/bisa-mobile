@@ -23,6 +23,7 @@ import AktivitasTabNav, { AktivitasTabKey } from "../../src/components/aktivitas
 import AktivitasJobCard from "../../src/components/aktivitas/AktivitasJobCard";
 import AktivitasEmptyState from "../../src/components/aktivitas/AktivitasEmptyState";
 import { formatRupiah } from "../../src/lib/payment";
+import { AktivitasSkeleton } from "../../src/components/SkeletonLoader";
 
 export default function AktivitasPage() {
   const router = useRouter();
@@ -514,12 +515,7 @@ export default function AktivitasPage() {
       >
         <View className="px-4 pt-3 max-w-[440px] w-full self-center">
           {loading && !refreshing ? (
-            <View className="py-16 items-center justify-center">
-              <ActivityIndicator color="#ff6b00" size="large" />
-              <Text className="text-xs font-semibold text-gray-400 mt-3">
-                Memuat riwayat aktivitas...
-              </Text>
-            </View>
+            <AktivitasSkeleton />
           ) : filteredJobs.length === 0 ? (
             <AktivitasEmptyState
               activeTab={activeTab}

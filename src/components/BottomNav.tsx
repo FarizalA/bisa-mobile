@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, usePathname } from "expo-router";
 import { Home, Compass, Plus, Briefcase, User } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -9,6 +10,7 @@ import { getStoredUser } from "../lib/user-storage";
 type NavTab = "home" | "radar" | "posting" | "aktivitas" | "profil";
 
 export default function BottomNav({ active }: { active: NavTab }) {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeJobsCount, setActiveJobsCount] = useState<number>(0);
 
@@ -47,7 +49,10 @@ export default function BottomNav({ active }: { active: NavTab }) {
   };
 
   return (
-    <View className="bg-white border-t border-gray-100 px-2 py-1.5 flex-row items-center justify-around shadow-lg">
+    <View
+      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around shadow-lg"
+      style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+    >
       {/* 1. Beranda */}
       <TouchableOpacity
         onPress={() => handlePress("home", "/c/home")}

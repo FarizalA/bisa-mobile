@@ -119,9 +119,13 @@ export default function LandingPage() {
               <Text className="text-[#131b2e] text-[17px] font-bold">Masuk</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.push("/c/home" as any)} className="items-center py-2">
-              <Text className="text-[#131b2e] font-semibold text-[13px] text-center">
-                Butuh bantuan cepat? Jelajahi Layanan Dulu →
+            <TouchableOpacity 
+              onPress={() => router.push("/c/home" as any)} 
+              activeOpacity={0.7}
+              className="items-center py-2 mt-1"
+            >
+              <Text className="text-[13px] font-semibold text-[#5a4136] text-center">
+                Jelajahi Aplikasi →
               </Text>
             </TouchableOpacity>
           </View>

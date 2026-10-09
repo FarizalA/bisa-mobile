@@ -1,10 +1,10 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity } from "react-native";
-import { AlertTriangle } from "lucide-react-native";
+import { View, Text } from "react-native";
 import { type CariKerjaLogic } from "../../hooks/useCariKerjaLogic";
+import { KycGateModal } from "../KycGateModal.native";
 
 export default function CariKerjaModals({ logic }: { logic: CariKerjaLogic }) {
-  const { toast } = logic;
+  const { toast, kycGate } = logic;
 
   return (
     <>
@@ -26,6 +26,17 @@ export default function CariKerjaModals({ logic }: { logic: CariKerjaLogic }) {
             <Text className="text-xs font-bold text-white flex-1">{toast.message}</Text>
           </View>
         </View>
+      )}
+
+      {/* KYC Soft-Gate Modal */}
+      {kycGate && (
+        <KycGateModal
+          visible={kycGate.modalVisible}
+          onClose={kycGate.closeModal}
+          actionContext={kycGate.actionContext}
+          isLoggedIn={kycGate.isLoggedIn}
+          kycStatus={kycGate.kycStatus}
+        />
       )}
     </>
   );

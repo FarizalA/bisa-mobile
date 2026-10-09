@@ -200,7 +200,7 @@ export default function MitraPublicProfilePage() {
                 {userProfile.is_trusted && <View style={{ position: "absolute", bottom: -2, right: -2 }} className="w-5 h-5 rounded-full bg-[#10B981] items-center justify-center border-2 border-white"><Check size={11} color="#fff" strokeWidth={3} /></View>}
               </View>
               <View className="flex-1 pt-1">
-                <Text className="text-[18px] font-extrabold text-[#131B2E]" numberOfLines={1}>{userProfile.name}</Text>
+                <Text className="text-[17px] font-extrabold text-[#131B2E] leading-snug" numberOfLines={2}>{userProfile.name}</Text>
                 <View className="flex-row items-center mt-1 flex-wrap">
                   <View
                     className="rounded-full flex-row items-center"
@@ -243,7 +243,7 @@ export default function MitraPublicProfilePage() {
               <Text className="text-[14px] font-bold text-[#131b2e]">Ringkasan Profil</Text>
               <Text
                 className="text-[13px] text-gray-500 font-medium"
-                style={{ textAlign: "justify", lineHeight: 21 }}
+                style={{ textAlign: "left", lineHeight: 21 }}
                 numberOfLines={isDescExpanded ? undefined : 3}
               >
                 {userProfile.mitra_description || (userProfile as any).bio || "Mitra profesional yang siap membantu kebutuhan Anda dengan kualitas terbaik."}
@@ -257,10 +257,10 @@ export default function MitraPublicProfilePage() {
                 {(keahlianList.length > 0 ? keahlianList : ["Servis AC & Elektronik"]).map((svc: string, idx: number) => (
                   <View
                     key={idx}
-                    className="bg-[#f0efff] rounded-[10px]"
+                    className="bg-[#FFF7ED] border border-[#FFEDD5] rounded-xl"
                     style={{ paddingHorizontal: 12, paddingVertical: 6 }}
                   >
-                    <Text className="text-[12px] font-bold text-[#3b4256]">{svc}</Text>
+                    <Text className="text-[12px] font-bold text-[#A04100]">{svc}</Text>
                   </View>
                 ))}
               </View>

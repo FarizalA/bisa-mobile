@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
+import { useKycGate } from "./useKycGate";
 
 export interface Job {
   id: string;
@@ -23,6 +24,7 @@ export interface Job {
 export function useCariKerjaLogic() {
   const params = useLocalSearchParams();
   const targetJobId = params?.jobId ? String(params.jobId) : null;
+  const kycGate = useKycGate();
 
   const [user, setUser] = useState<any>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -301,9 +303,11 @@ export function useCariKerjaLogic() {
   };
 
   const openApplyForm = (job: Job) => {
-    setApplyHarga(job.budget);
-    setApplyPesan("Saya siap mengerjakan ini dengan profesional.");
-    setIsApplying(true);
+    kycGate.triggerKycGate("BID_JOB", () => {
+      setApplyHarga(job.budget);
+      setApplyPesan("Saya siap mengerjakan ini dengan profesional.");
+      setIsApplying(true);
+    });
   };
 
   return {
@@ -347,6 +351,7 @@ export function useCariKerjaLogic() {
     handleCancelApplication,
     openApplyForm,
     fetchNearbyJobs,
+    kycGate,
   };
 }
 

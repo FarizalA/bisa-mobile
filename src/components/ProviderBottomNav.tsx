@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Home, Search, MessageSquare, Briefcase, User } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -15,6 +16,7 @@ export default function ProviderBottomNav({
   active: ProviderNavTab;
   activeJobsCount?: number;
 }) {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [count, setCount] = useState(activeJobsCount);
 
@@ -55,7 +57,10 @@ export default function ProviderBottomNav({
   };
 
   return (
-    <View className="bg-white border-t border-gray-100 px-2 py-1.5 flex-row items-center justify-around shadow-lg">
+    <View
+      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around shadow-lg"
+      style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+    >
       {/* 1. Beranda */}
       <TouchableOpacity
         onPress={() => handlePress("home", "/p/home")}

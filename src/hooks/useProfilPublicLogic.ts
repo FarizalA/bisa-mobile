@@ -206,7 +206,8 @@ export function useProfilPublicLogic(targetId: string) {
     });
   }, [loadData]);
 
-  const keahlianList: string[] = userProfile?.keahlian ? String(userProfile.keahlian).split(",").map((k: string) => k.trim()).filter(Boolean) : [];
+  const rawKeahlian = userProfile?.keahlian ? String(userProfile.keahlian).split(",").map((k: string) => k.trim()).filter(Boolean) : [];
+  const keahlianList: string[] = Array.from(new Set(rawKeahlian));
   const xp = userProfile?.experience_points ?? 0;
   const { current: rank } = getRank(xp);
   const avgRating = reviews.length > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : userProfile?.rating ? Number(userProfile.rating).toFixed(1) : "Baru";

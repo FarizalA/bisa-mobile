@@ -239,6 +239,14 @@ export default function RadarPage() {
       style={{ width: "100%", height: "100%" }}
       javaScriptEnabled
       domStorageEnabled
+      onMessage={(event) => {
+        try {
+          const data = JSON.parse(event.nativeEvent.data);
+          if (data.type === "OPEN_PROFILE" && data.id) {
+            router.push(`/profil/${data.id}` as any);
+          }
+        } catch (e) {}
+      }}
     />
   );
 

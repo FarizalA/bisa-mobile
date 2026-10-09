@@ -144,75 +144,54 @@ function CariKerjaMapWeb({ logic }: { logic: CariKerjaLogic }) {
   );
 }
 
+import { WebView } from "react-native-webview";
+import { generateCariKerjaLeafletHtml } from "../../utils/cariKerjaLeafletHtml";
+
 export default function CariKerjaMap({ logic }: { logic: CariKerjaLogic }) {
-  const { viewMode } = logic;
+  const { viewMode, mitraLoc, jobs, setSelectedJob, radius, activeCategory, setActiveCategory } = logic;
+  const webviewRef = useRef<any>(null);
+
   if (viewMode !== "map") return null;
 
   if (Platform.OS === "web") {
     return <CariKerjaMapWeb logic={logic} />;
   }
 
-  // Native Android/iOS: react-native-maps (tidak dibundle di web)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Maps: any = require("react-native-maps");
-  const MapView = Maps.default;
-  const Marker = Maps.Marker;
-  const Circle = Maps.Circle;
-  const { mitraLoc, jobs, setSelectedJob } = logic;
-  const initialRegion = mitraLoc
-    ? {
-        latitude: mitraLoc.lat,
-        longitude: mitraLoc.lng,
-        latitudeDelta: (logic.radius * 2) / 111,
-        longitudeDelta: (logic.radius * 2) / 111,
-      }
-    : { latitude: -6.2, longitude: 106.816666, latitudeDelta: 0.1, longitudeDelta: 0.1 };
+  // Native Android/iOS: WebView with Leaflet fallback (mencegah FC react-native-maps)
+  const leafletHTML = generateCariKerjaLeafletHtml(
+    mitraLoc?.lat || -6.2,
+    mitraLoc?.lng || 106.816666,
+    radius,
+    jobs
+  );
 
   return (
     <View style={{ flex: 1, minHeight: 520, width: "100%", position: "relative" }}>
-      <MapView style={{ flex: 1, width: "100%", height: "100%" }} initialRegion={initialRegion}>
-        {mitraLoc && (
-          <>
-            <Marker coordinate={{ latitude: mitraLoc.lat, longitude: mitraLoc.lng }} title="Lokasi Anda">
-              <View className="w-6 h-6 rounded-full bg-emerald-600 border-2 border-white items-center justify-center shadow-md">
-                <View className="w-2 h-2 rounded-full bg-white" />
-              </View>
-            </Marker>
-            <Circle
-              center={{ latitude: mitraLoc.lat, longitude: mitraLoc.lng }}
-              radius={logic.radius >= 100 ? 50000 : logic.radius * 1000}
-              fillColor="rgba(5, 150, 105, 0.12)"
-              strokeColor="rgba(5, 150, 105, 0.4)"
-              strokeWidth={1.5}
-            />
-          </>
-        )}
-        {jobs.map((job: any) => {
-          if (!job.latitude || !job.longitude) return null;
-          return (
-            <Marker
-              key={job.id}
-              coordinate={{ latitude: Number(job.latitude), longitude: Number(job.longitude) }}
-              title={job.judul}
-              description={job.budget}
-              onPress={() => setSelectedJob(job)}
-            >
-              <View className="bg-white px-2 py-1 rounded-full border border-emerald-500 shadow-md flex-row items-center gap-1">
-                <Text className="text-xs">💼</Text>
-                <Text className="text-[10px] font-black text-emerald-700">{job.budget}</Text>
-              </View>
-            </Marker>
-          );
-        })}
-      </MapView>
+      <WebView
+        ref={webviewRef}
+        originWhitelist={["*"]}
+        source={{ html: leafletHTML }}
+        style={{ width: "100%", height: "100%" }}
+        javaScriptEnabled
+        domStorageEnabled
+        onMessage={(event) => {
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data.type === "SELECT_JOB" && data.id) {
+              const job = jobs.find((j: any) => j.id === data.id);
+              if (job) setSelectedJob(job);
+            }
+          } catch (e) {}
+        }}
+      />
       <View className="absolute top-3 left-0 right-0 px-4">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {KATEGORI_JASA.map((cat) => {
-            const isSelected = logic.activeCategory === cat;
+            const isSelected = activeCategory === cat;
             return (
               <TouchableOpacity
                 key={cat}
-                onPress={() => logic.setActiveCategory(cat)}
+                onPress={() => setActiveCategory(cat)}
                 activeOpacity={0.85}
                 className={`px-3 py-1.5 rounded-full shadow-md ${isSelected ? "bg-emerald-600" : "bg-white"}`}
               >

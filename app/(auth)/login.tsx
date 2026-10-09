@@ -120,10 +120,21 @@ export default function LoginPage() {
             {/* Tombol Google */}
             <TouchableOpacity
               activeOpacity={0.8}
-              className="w-full h-12 bg-white border border-gray-300 rounded-full flex-row items-center justify-center gap-3"
+              className="w-full h-12 bg-white border border-gray-300 rounded-full flex-row items-center justify-center gap-3 mb-3"
             >
               <GoogleIcon size={18} />
               <Text className="text-gray-700 font-bold text-base">Lanjutkan dengan Google</Text>
+            </TouchableOpacity>
+
+            {/* Tombol Masuk Tanpa Login (Exploration Mode) */}
+            <TouchableOpacity
+              onPress={() => router.push("/c/home" as any)}
+              activeOpacity={0.7}
+              className="items-center py-2 mt-2"
+            >
+              <Text className="text-[13px] font-semibold text-gray-600 text-center">
+                Jelajahi Aplikasi →
+              </Text>
             </TouchableOpacity>
           </View>
 

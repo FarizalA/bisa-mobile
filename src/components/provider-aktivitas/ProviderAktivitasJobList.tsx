@@ -119,16 +119,13 @@ interface Props {
   actingId: string | number | null;
 }
 
+import { AktivitasSkeleton } from "../SkeletonLoader";
+
 export default function ProviderAktivitasJobList({ jobs, filteredJobs, loading, error, activeTab, onOpenChat, onOpenDetail, onAccept, onReject, onStartWork, onDeliver, actingId }: Props) {
   const router = useRouter();
 
   if (loading) {
-    return (
-      <View className="py-12 items-center justify-center gap-3">
-        <ActivityIndicator color="#059669" size="large" />
-        <Text className="text-xs font-bold text-gray-400">Memuat aktivitas...</Text>
-      </View>
-    );
+    return <AktivitasSkeleton />;
   }
 
   if (error) {

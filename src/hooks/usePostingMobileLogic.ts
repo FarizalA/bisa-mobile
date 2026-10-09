@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
 import { compressImage } from "../lib/imageCompression";
+import { usePopup } from "../components/PopupProvider.native";
+import { useKycGate } from "./useKycGate";
 
 const LIST_RADIUS = ["Maks. 1 km", "Maks. 3 km", "Maks. 5 km", "Maks. 10 km", "Maks. 25 km", "Seluruh Kota"];
 export type DeadlineOpt = { name: string; desc: string; urgent: boolean };
@@ -43,6 +44,8 @@ const KATEGORI_ICON: Record<string,string> = {
 
 export function usePostingMobileLogic() {
   const router = useRouter();
+  const { showPopup } = usePopup();
+  const kycGate = useKycGate();
   const params = useLocalSearchParams<{ edit?: string; service_title?: string; service_price?: string; is_chat?: string }>();
   const editId = params.edit ? String(params.edit) : null;
   const serviceTitle = params.service_title ? String(params.service_title) : null;
@@ -134,16 +137,21 @@ export function usePostingMobileLogic() {
   useEffect(() => {
     (async () => {
       const stored: any = await getStoredUser();
-      if (!stored?.id) { router.replace("/(auth)/login" as any); return; }
-      setUser(stored);
-      if (stored.address) setLokasi(stored.address);
+      if (stored?.id) {
+        setUser(stored);
+        if (stored.address) setLokasi(stored.address);
+      } else {
+        setUser({ isGuest: true });
+      }
       if (serviceTitle) setJudul(serviceTitle);
       if (servicePrice && servicePrice !== "0") setBudget(String(servicePrice).replace(/\D/g,""));
       if (isChatOnly) setDeskripsi("Tuliskan pertanyaan awal atau detail singkat yang ingin Anda diskusikan dengan mitra...");
-      try {
-        const { data } = await supabase.from("users_bisa").select("can_post_jobs").eq("id", stored.id).maybeSingle();
-        if (data && (data as any).can_post_jobs === false) setPopup({ show:true, title:"Akses Dibatasi", message:"Akses memposting pekerjaan untuk akun Anda sedang dinonaktifkan oleh Admin BISA.", type:"error", isSuccess:false });
-      } catch {}
+      if (stored?.id) {
+        try {
+          const { data } = await supabase.from("users_bisa").select("can_post_jobs").eq("id", stored.id).maybeSingle();
+          if (data && (data as any).can_post_jobs === false) setPopup({ show:true, title:"Akses Dibatasi", message:"Akses memposting pekerjaan untuk akun Anda sedang dinonaktifkan oleh Admin BISA.", type:"error", isSuccess:false });
+        } catch {}
+      }
     })();
   }, [router, serviceTitle, servicePrice, isChatOnly]);
 
@@ -153,7 +161,11 @@ export function usePostingMobileLogic() {
     setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { Alert.alert("Izin Lokasi", "Aktifkan izin lokasi di pengaturan."); setIsLocating(false); return; }
+      if (status !== "granted") {
+        showPopup({ title: "Izin Lokasi", message: "Aktifkan izin lokasi di pengaturan HP Anda.", type: "warning", theme: "client" });
+        setIsLocating(false);
+        return;
+      }
       const pos = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = pos.coords;
       setMapCoords({ lat: latitude, lng: longitude });
@@ -186,17 +198,26 @@ export function usePostingMobileLogic() {
           if (area) setAlamatMap(String(area));
         }
       } catch {}
-    } catch (e: any) { Alert.alert("Gagal GPS", e?.message || "Pastikan GPS aktif."); }
-    finally { setIsLocating(false); }
+    } catch (e: any) {
+      showPopup({ title: "Gagal GPS", message: e?.message || "Pastikan GPS aktif.", type: "error", theme: "client" });
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   const pickFoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") { Alert.alert("Izin Galeri", "Aktifkan izin galeri."); return; }
+    if (status !== "granted") {
+      showPopup({ title: "Izin Galeri", message: "Aktifkan izin akses galeri di pengaturan HP.", type: "warning", theme: "client" });
+      return;
+    }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false });
     if (res.canceled || !res.assets?.[0]) return;
     const a = res.assets[0];
-    if ((a.fileSize||0) > 8*1024*1024) { Alert.alert("File Besar", "Maks 8 MB"); return; }
+    if ((a.fileSize||0) > 8*1024*1024) {
+      showPopup({ title: "File Terlalu Besar", message: "Ukuran maksimal foto adalah 8 MB.", type: "warning", theme: "client" });
+      return;
+    }
     
     setUploadingFoto(true);
     try {
@@ -215,8 +236,10 @@ export function usePostingMobileLogic() {
 
   const doSubmit = async () => {
     try {
-      const { data: uData } = await supabase.from("users_bisa").select("can_post_jobs, kyc_status").eq("id", user.id).maybeSingle();
-      if (uData && ((uData as any).can_post_jobs===false || (uData as any).kyc_status==="Dibekukan")) { setPopup({ show:true, title:"Akses Dibatasi", message:"Akun Anda tidak memiliki izin untuk memposting pekerjaan baru saat ini.", type:"error", isSuccess:false }); return; }
+      if (user?.id) {
+        const { data: uData } = await supabase.from("users_bisa").select("can_post_jobs, kyc_status").eq("id", user.id).maybeSingle();
+        if (uData && ((uData as any).can_post_jobs===false || (uData as any).kyc_status==="Dibekukan")) { setPopup({ show:true, title:"Akses Dibatasi", message:"Akun Anda tidak memiliki izin untuk memposting pekerjaan baru saat ini.", type:"error", isSuccess:false }); return; }
+      }
     } catch {}
     if (!judul.trim() || !deskripsi.trim() || (!isOnline && !lokasi.trim()) || (kategori.name==="Lainnya" && !kategoriLainnya.trim())) {
       let msg = isOnline ? "Mohon isi judul dan deskripsi pengerjaan." : "Mohon isi judul, deskripsi, dan lokasi pengerjaan.";
@@ -277,12 +300,14 @@ export function usePostingMobileLogic() {
   };
 
   const handleSubmit = async () => {
-    // Soft validation GPS: ingatkan user sebelum kirim jika offline tapi belum deteksi
-    if (!isOnline && !isGpsDetected) {
-      setShowGpsConfirm(true);
-      return;
-    }
-    await doSubmit();
+    kycGate.triggerKycGate("POST_JOB", async () => {
+      // Soft validation GPS: ingatkan user sebelum kirim jika offline tapi belum deteksi
+      if (!isOnline && !isGpsDetected) {
+        setShowGpsConfirm(true);
+        return;
+      }
+      await doSubmit();
+    });
   };
 
   const confirmGpsSubmit = async (deteksiDulu: boolean) => {
@@ -328,5 +353,6 @@ export function usePostingMobileLogic() {
     popup, closePopup, handleSubmit, showGpsConfirm, confirmGpsSubmit, pendingSubmit,
     listKategori, listRadius: LIST_RADIUS, listDeadline: LIST_DEADLINE, listMasaBerlaku: LIST_MASA_BERLAKU,
     editId,
+    kycGate,
   };
 }

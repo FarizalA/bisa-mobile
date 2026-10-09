@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "expo-router";
-import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { getStoredUser, setStoredUser, removeStoredUser } from "../lib/user-storage";
 import * as Location from "expo-location";
+import { usePopup } from "../components/PopupProvider.native";
 
 export function useProfilMobileLogic(role: "mitra" | "client") {
   const router = useRouter();
+  const { showPopup } = usePopup();
+  const theme = role === "mitra" ? "provider" : "client";
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isActive, setIsActive] = useState(true);
@@ -101,7 +103,12 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Izin GPS Dibutuhkan", "Aktifkan lokasi untuk membaca GPS realtime.");
+        showPopup({
+          title: "Izin GPS Dibutuhkan",
+          message: "Aktifkan lokasi untuk membaca GPS realtime.",
+          type: "warning",
+          theme,
+        });
         setDetectingGPS(false);
         return;
       }
@@ -110,7 +117,12 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
       setLocCoord(newCoord);
       await reverseGeocode(newCoord.lat, newCoord.lng);
     } catch (err: any) {
-      Alert.alert("Gagal membaca GPS", err.message || "Pastikan GPS diaktifkan.");
+      showPopup({
+        title: "Gagal membaca GPS",
+        message: err.message || "Pastikan GPS diaktifkan.",
+        type: "error",
+        theme,
+      });
     } finally {
       setDetectingGPS(false);
     }
@@ -128,10 +140,20 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
         setUser(updated);
         await setStoredUser(updated);
       } else {
-        Alert.alert("Gagal", "Gagal mengubah status aktif");
+        showPopup({
+          title: "Gagal",
+          message: "Gagal mengubah status aktif",
+          type: "error",
+          theme,
+        });
       }
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      showPopup({
+        title: "Error",
+        message: e.message,
+        type: "error",
+        theme,
+      });
     } finally {
       setIsToggling(false);
     }
@@ -147,7 +169,12 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
       if (!lat || !lng) {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Izin GPS Dibutuhkan", "Aktifkan izin lokasi untuk menyimpan titik radar.");
+          showPopup({
+            title: "Izin GPS Dibutuhkan",
+            message: "Aktifkan izin lokasi untuk menyimpan titik radar.",
+            type: "warning",
+            theme,
+          });
           setSavingLocation(false);
           return;
         }
@@ -169,17 +196,30 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
         setUser(updated);
         await setStoredUser(updated);
         setShowLocationModal(false);
-        Alert.alert(
-          "Lokasi Tersimpan",
-          role === "mitra"
-            ? "Titik lokasi kerja Anda berhasil disimpan ke Radar!"
-            : "Titik pengantaran berhasil diperbarui secara realtime!"
-        );
+        showPopup({
+          title: "Lokasi Tersimpan",
+          message:
+            role === "mitra"
+              ? "Titik lokasi kerja Anda berhasil disimpan ke Radar!"
+              : "Titik pengantaran berhasil diperbarui secara realtime!",
+          type: "success",
+          theme,
+        });
       } else {
-        Alert.alert("Gagal", error.message);
+        showPopup({
+          title: "Gagal",
+          message: error.message,
+          type: "error",
+          theme,
+        });
       }
     } catch (e: any) {
-      Alert.alert("Gagal GPS", e.message || "Gagal mengambil lokasi GPS");
+      showPopup({
+        title: "Gagal GPS",
+        message: e.message || "Gagal mengambil lokasi GPS",
+        type: "error",
+        theme,
+      });
     } finally {
       setSavingLocation(false);
     }

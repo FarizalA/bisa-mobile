@@ -46,17 +46,17 @@ import {
   ShieldCheck,
 } from "lucide-react-native";
 import { usePostingMobileLogic } from "../../src/hooks/usePostingMobileLogic";
+import { KycGateModal } from "../../src/components/KycGateModal.native";
 import { safeBack } from "@/lib/navigation";
+
+import { WebView } from "react-native-webview";
 
 // MapView guard: hanya di native, agar web tidak error codegenNativeComponent
 let MapView: any = null;
 let Marker: any = null;
 if (Platform.OS !== "web") {
-  try {
-    const Maps = require("react-native-maps");
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-  } catch {}
+  // Disable native maps to prevent FC
+  MapView = null;
 }
 
 function Pill({
@@ -284,24 +284,19 @@ export default function PostingMobilePage() {
                         <MapPin size={30} color="#ff6b00" strokeWidth={2.5} style={{ marginTop: -10 } as any} />
                       </View>
                     </View>
-                  ) : MapView ? (
-                    <MapView
-                      style={{ flex: 1 }}
-                      region={{
-                        latitude: p.mapCoords.lat,
-                        longitude: p.mapCoords.lng,
-                        latitudeDelta: 0.02,
-                        longitudeDelta: 0.02,
-                      }}
-                      scrollEnabled={false}
-                      zoomEnabled={false}
-                    >
-                      <Marker coordinate={{ latitude: p.mapCoords.lat, longitude: p.mapCoords.lng }} pinColor="#ff6b00" />
-                    </MapView>
                   ) : (
-                    <View className="flex-1 items-center justify-center pointer-events-none">
-                      <MapPin size={24} color="#ff6b00" />
-                      <Text className="text-xs text-gray-500 mt-1">Koordinat GPS Aktif</Text>
+                    <View className="w-full h-full relative pointer-events-none">
+                      <WebView
+                        source={{ uri: `https://www.openstreetmap.org/export/embed.html?bbox=${p.bboxStr}&layer=mapnik&marker=${p.mapCoords.lat}%2C${p.mapCoords.lng}` }}
+                        style={{ flex: 1, opacity: 0.8 }}
+                        scrollEnabled={false}
+                        showsHorizontalScrollIndicator={false}
+                        showsVerticalScrollIndicator={false}
+                      />
+                      <View className="absolute inset-0 items-center justify-center pointer-events-none">
+                        <View className="w-8 h-8 bg-[#ff6b00]/25 rounded-full absolute" />
+                        <MapPin size={30} color="#ff6b00" strokeWidth={2.5} style={{ marginTop: -10 } as any} />
+                      </View>
                     </View>
                   )}
 
@@ -703,6 +698,16 @@ export default function PostingMobilePage() {
           </View>
         </View>
       </Modal>
+      {/* KYC Soft-Gate Modal */}
+      {p.kycGate && (
+        <KycGateModal
+          visible={p.kycGate.modalVisible}
+          onClose={p.kycGate.closeModal}
+          actionContext={p.kycGate.actionContext}
+          isLoggedIn={p.kycGate.isLoggedIn}
+          kycStatus={p.kycGate.kycStatus}
+        />
+      )}
     </SafeAreaView>
   );
 }

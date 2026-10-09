@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "expo-router";
-import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import { getStoredUser, setStoredUser } from "../lib/user-storage";
 import { compressImage } from "../lib/imageCompression";
 import { safeBack } from "@/lib/navigation";
+import { usePopup } from "../components/PopupProvider.native";
 
 export interface Service {
   id?: number;
@@ -44,6 +44,7 @@ async function uriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
 
 export function useEditProfilMobileLogic() {
   const router = useRouter();
+  const { showPopup } = usePopup();
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -151,34 +152,31 @@ export function useEditProfilMobileLogic() {
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Izin Kamera Ditolak", "Aktifkan izin kamera di pengaturan.");
+          showPopup({ title: "Izin Kamera Ditolak", message: "Aktifkan izin kamera di pengaturan HP.", type: "warning" });
           return;
         }
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Izin Galeri Ditolak", "Aktifkan izin galeri di pengaturan.");
+          showPopup({ title: "Izin Galeri Ditolak", message: "Aktifkan izin galeri di pengaturan HP.", type: "warning" });
           return;
         }
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        // fallback kamera jika diminta — expo tidak punya launchCameraAsync terpisah di web, cek platform
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       } as any);
-      // Jika useCamera true dan di native, coba kamera
       let picked: ImagePicker.ImagePickerResult = result;
       if (useCamera && !result.canceled) {
-        // sudah dapat dari library — tapi jika mau kamera, launchCamera
         const cam = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
         if (!cam.canceled) picked = cam;
       }
       if (picked.canceled || !picked.assets?.[0]) return;
       let uri = picked.assets[0].uri;
       if (picked.assets[0].fileSize && picked.assets[0].fileSize > 5 * 1024 * 1024) {
-        Alert.alert("File Terlalu Besar", "Maksimal 5 MB");
+        showPopup({ title: "File Terlalu Besar", message: "Ukuran foto maksimal adalah 5 MB.", type: "warning" });
         return;
       }
       setUploadingImage(true);
@@ -192,9 +190,9 @@ export function useEditProfilMobileLogic() {
       const { data: pub } = supabase.storage.from("profile_photos").getPublicUrl(`profiles/${fileName}`);
       setFaceUrl(pub.publicUrl);
       setPreviewImage(pub.publicUrl);
-      Alert.alert("Berhasil", "Foto profil diperbarui");
+      showPopup({ title: "Berhasil", message: "Foto profil berhasil diperbarui.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal Upload", e.message || "Gagal upload foto");
+      showPopup({ title: "Gagal Upload", message: e.message || "Gagal upload foto.", type: "error" });
     } finally {
       setUploadingImage(false);
     }
@@ -205,7 +203,7 @@ export function useEditProfilMobileLogic() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Izin Kamera", "Aktifkan izin kamera.");
+        showPopup({ title: "Izin Kamera", message: "Aktifkan izin akses kamera.", type: "warning" });
         return;
       }
       const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
@@ -222,9 +220,9 @@ export function useEditProfilMobileLogic() {
       const { data: pub } = supabase.storage.from("profile_photos").getPublicUrl(`profiles/${fileName}`);
       setFaceUrl(pub.publicUrl);
       setPreviewImage(pub.publicUrl);
-      Alert.alert("Berhasil", "Foto profil diperbarui");
+      showPopup({ title: "Berhasil", message: "Foto profil berhasil diperbarui.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     } finally {
       setUploadingImage(false);
     }
@@ -234,13 +232,13 @@ export function useEditProfilMobileLogic() {
   const pickGallery = async () => {
     if (!user) return;
     if (gallery.length >= 5) {
-      Alert.alert("Limit Galeri", "Maksimal 5 foto galeri");
+      showPopup({ title: "Limit Galeri", message: "Maksimal 5 foto galeri.", type: "warning" });
       return;
     }
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Izin Galeri", "Aktifkan izin galeri.");
+        showPopup({ title: "Izin Galeri", message: "Aktifkan izin akses galeri.", type: "warning" });
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, selectionLimit: 5 - gallery.length, quality: 0.8 });
@@ -250,7 +248,7 @@ export function useEditProfilMobileLogic() {
       for (const a of res.assets) {
         if (gallery.length + added >= 5) break;
         if ((a.fileSize || 0) > 5 * 1024 * 1024) {
-          Alert.alert("Skip", `${a.fileName || "Foto"} melebihi 5 MB — dilewati`);
+          showPopup({ title: "File Melebihi Limit", message: `${a.fileName || "Foto"} melebihi 5 MB dan dilewati.`, type: "warning" });
           continue;
         }
         const uri = await compressImage(a.uri);
@@ -268,9 +266,9 @@ export function useEditProfilMobileLogic() {
           added++;
         }
       }
-      if (added > 0) Alert.alert("Berhasil", `${added} foto ditambahkan ke galeri`);
+      if (added > 0) showPopup({ title: "Berhasil", message: `${added} foto ditambahkan ke galeri.`, type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal Galeri", e.message);
+      showPopup({ title: "Gagal Galeri", message: e.message, type: "error" });
     } finally {
       setUploadingGallery(false);
     }
@@ -281,20 +279,20 @@ export function useEditProfilMobileLogic() {
       const { error } = await supabase.from("mitra_gallery").delete().eq("id", id);
       if (error) throw error;
       setGallery((prev) => prev.filter((g) => g.id !== id));
-      Alert.alert("Berhasil", "Foto galeri dihapus");
+      showPopup({ title: "Berhasil", message: "Foto galeri dihapus.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     }
   };
 
   // SERVICES
   const addService = async () => {
     if (!newService.title.trim() || newService.price <= 0 || !user) {
-      Alert.alert("Validasi", "Judul dan harga wajib diisi");
+      showPopup({ title: "Validasi", message: "Judul dan harga wajib diisi.", type: "warning" });
       return;
     }
     if (services.length >= 5) {
-      Alert.alert("Limit", "Maksimal 5 layanan");
+      showPopup({ title: "Limit Layanan", message: "Maksimal 5 layanan.", type: "warning" });
       return;
     }
     try {
@@ -302,9 +300,9 @@ export function useEditProfilMobileLogic() {
       if (error) throw error;
       if (data?.[0]) setServices((prev) => [...prev, data[0] as any]);
       setNewService({ title: "", description: "", price: 0, unit: "unit", is_popular: false });
-      Alert.alert("Berhasil", "Layanan ditambahkan");
+      showPopup({ title: "Berhasil", message: "Layanan berhasil ditambahkan.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     }
   };
   const deleteService = async (id: number) => {
@@ -312,9 +310,9 @@ export function useEditProfilMobileLogic() {
       const { error } = await supabase.from("mitra_services").delete().eq("id", id);
       if (error) throw error;
       setServices((prev) => prev.filter((s) => s.id !== id));
-      Alert.alert("Berhasil", "Layanan dihapus");
+      showPopup({ title: "Berhasil", message: "Layanan dihapus.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     }
   };
 
@@ -323,20 +321,20 @@ export function useEditProfilMobileLogic() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Izin Galeri", "Aktifkan izin galeri.");
+        showPopup({ title: "Izin Galeri", message: "Aktifkan izin galeri di pengaturan HP.", type: "warning" });
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, selectionLimit: 5, quality: 0.8 });
       if (res.canceled || !res.assets?.length) return;
       if (res.assets.length > 5) {
-        Alert.alert("Limit", "Maksimal 5 foto per project");
+        showPopup({ title: "Limit Foto", message: "Maksimal 5 foto per project.", type: "warning" });
         return;
       }
       const uris: string[] = [];
       const previews: string[] = [];
       for (const a of res.assets) {
         if ((a.fileSize || 0) > 5 * 1024 * 1024) {
-          Alert.alert("Skip", `${a.fileName || "Foto"} melebihi 5 MB`);
+          showPopup({ title: "Foto Melebihi Limit", message: `${a.fileName || "Foto"} melebihi 5 MB.`, type: "warning" });
           continue;
         }
         uris.push(a.uri);
@@ -345,21 +343,21 @@ export function useEditProfilMobileLogic() {
       setPendingPortfolioUris(uris);
       setPreviewUrls(previews);
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     }
   };
 
   const addPortfolio = async () => {
     if (!newPortfolio.project_title.trim() || !user) {
-      Alert.alert("Validasi", "Judul project wajib diisi");
+      showPopup({ title: "Validasi", message: "Judul project wajib diisi.", type: "warning" });
       return;
     }
     if (pendingPortfolioUris.length === 0) {
-      Alert.alert("Validasi", "Pilih minimal 1 foto (max 5)");
+      showPopup({ title: "Validasi", message: "Pilih minimal 1 foto (maksimal 5).", type: "warning" });
       return;
     }
     if (portfolio.length >= 6) {
-      Alert.alert("Limit", "Maksimal 6 project portofolio");
+      showPopup({ title: "Limit Project", message: "Maksimal 6 project portofolio.", type: "warning" });
       return;
     }
     setUploadingPortfolio(true);
@@ -382,9 +380,9 @@ export function useEditProfilMobileLogic() {
       setNewPortfolio({ project_title: "", project_description: "", image_urls: [] });
       setPendingPortfolioUris([]);
       setPreviewUrls([]);
-      Alert.alert("Berhasil", "Project portofolio ditambahkan");
+      showPopup({ title: "Berhasil", message: "Project portofolio berhasil ditambahkan.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     } finally {
       setUploadingPortfolio(false);
     }
@@ -395,9 +393,9 @@ export function useEditProfilMobileLogic() {
       const { error } = await supabase.from("mitra_portfolio").delete().eq("id", id);
       if (error) throw error;
       setPortfolio((prev) => prev.filter((p) => p.id !== id));
-      Alert.alert("Berhasil", "Project dihapus");
+      showPopup({ title: "Berhasil", message: "Project portofolio dihapus.", type: "success" });
     } catch (e: any) {
-      Alert.alert("Gagal", e.message);
+      showPopup({ title: "Gagal", message: e.message, type: "error" });
     }
   };
 
@@ -417,7 +415,6 @@ export function useEditProfilMobileLogic() {
         mitra_description: mitraDescription,
         availability_status: availabilityStatus,
         availability_custom_text: availabilityCustom,
-        // karakteristik Auto — tetap kirim tapi mitra lihat read-only
         char_on_time: charOnTime,
         char_response: charResponse,
         char_warranty: charWarranty,
@@ -426,10 +423,10 @@ export function useEditProfilMobileLogic() {
       const updated = { ...user, phone, email, address, alamat_singkat: alamatSingkat, keahlian, base_price: parseFloat(basePrice) || 0, face_url: faceUrl, mitra_description: mitraDescription };
       await setStoredUser(updated);
       setUser(updated);
-      Alert.alert("Berhasil", "Profil berhasil disimpan");
+      showPopup({ title: "Berhasil", message: "Profil berhasil disimpan.", type: "success" });
       setTimeout(() => safeBack(router, "/c/home"), 900);
     } catch (e: any) {
-      Alert.alert("Gagal Simpan", e.message || "Gagal menyimpan profil");
+      showPopup({ title: "Gagal Simpan", message: e.message || "Gagal menyimpan profil.", type: "error" });
     } finally {
       setSaving(false);
     }

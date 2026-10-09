@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Search, Clock } from "lucide-react-native";
 import { type CariKerjaLogic } from "../../hooks/useCariKerjaLogic";
 
+import { JobCardSkeleton } from "../SkeletonLoader";
+
 export default function CariKerjaList({ logic }: { logic: CariKerjaLogic }) {
   const {
     viewMode,
@@ -21,12 +23,7 @@ export default function CariKerjaList({ logic }: { logic: CariKerjaLogic }) {
   return (
     <View className="flex-1 px-4 py-3">
       {loading ? (
-        <View className="py-12 items-center justify-center">
-          <ActivityIndicator color="#059669" size="large" />
-          <Text className="text-xs font-semibold text-gray-400 mt-2">
-            Memindai pekerjaan di sekitarmu...
-          </Text>
-        </View>
+        <JobCardSkeleton />
       ) : error ? (
         <View className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200">
           <Text className="text-xs font-bold text-red-700">{error}</Text>

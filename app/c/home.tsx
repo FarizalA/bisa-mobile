@@ -17,6 +17,7 @@ import {
   Star,
   SlidersHorizontal,
   ChevronRight,
+  ChevronDown,
   Briefcase,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -92,6 +93,16 @@ export default function ClientHomePage() {
   };
   const notifBadge = notifications.filter((n: any) => !n.is_read).length || unreadNotifCount;
 
+  // Title-case name helper
+  const formattedFirstName = React.useMemo(() => {
+    if (!user?.name) return "Kak";
+    const first = user.name.trim().split(/\s+/)[0];
+    if (!first) return "Kak";
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  }, [user?.name]);
+
+  const isFilterActive = minRating > 0 || onlyTrusted || sortBy !== "terdekat";
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       {isSearchMode ? (
@@ -161,38 +172,39 @@ export default function ClientHomePage() {
             <View className="max-w-[420px] w-full self-center">
               {/* 2. Greeting Bar */}
               <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2.5">
-                  <TouchableOpacity
-                    onPress={() => router.push("/c/profil" as any)}
-                    className="w-12 h-12 rounded-full bg-orange-100 border-2 border-white shadow-sm overflow-hidden items-center justify-center relative"
-                  >
-                    {user?.face_url ? (
-                      <Image source={{ uri: user.face_url }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={200} cachePolicy="memory-disk" />
-                    ) : (
-                      <Text className="text-[18px] font-black text-[#ff6b00]">
-                        {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
-                      </Text>
-                    )}
-                    <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white" />
-                  </TouchableOpacity>
+                <View className="flex-row items-center gap-3">
+                  <View className="relative">
+                    <TouchableOpacity
+                      onPress={() => router.push("/c/profil" as any)}
+                      activeOpacity={0.85}
+                      className="w-12 h-12 rounded-full bg-orange-100 border-2 border-orange-500/30 shadow-sm overflow-hidden items-center justify-center"
+                    >
+                      {user?.face_url ? (
+                        <Image source={{ uri: user.face_url }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={200} cachePolicy="memory-disk" />
+                      ) : (
+                        <Text className="text-[18px] font-black text-[#ff6b00]">
+                          {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                    {/* Badge Online presisi tanpa terpotong overflow */}
+                    <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
+                  </View>
 
-                  <View>
-                    <View className="flex-row items-center gap-1">
-                      <Text className="text-[17px] font-extrabold text-gray-900">
-                        Halo, {user?.name ? user.name.split(" ")[0].toUpperCase() : "PELANGGAN"}
+                  <View className="flex-col">
+                    <View className="flex-row items-center gap-1.5">
+                      <Text className="text-[17px] font-black text-gray-900 leading-tight">
+                        Halo, {formattedFirstName} 👋
                       </Text>
-                      <Text className="text-[16px]">👋</Text>
                     </View>
 
-                    <TouchableOpacity className="flex-row items-center gap-1 mt-0.5">
+                    <TouchableOpacity activeOpacity={0.7} className="flex-row items-center gap-1 mt-1 bg-orange-50/80 px-2.5 py-0.5 rounded-full border border-orange-100/80 self-start">
                       <MapPin size={12} color="#ff6b00" />
-                      <Text className="text-[12px] font-bold text-gray-800">{locationName}</Text>
-                      <Text className="text-[10px] text-gray-400">▾</Text>
+                      <Text className="text-[11px] font-extrabold text-gray-800">{locationName}</Text>
+                      <ChevronDown size={11} color="#ff6b00" strokeWidth={2.5} />
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                {/* Saldo Pill - hidden */}
               </View>
 
               {/* 3. Search Bar Input */}
@@ -204,7 +216,7 @@ export default function ClientHomePage() {
                     className="flex-row items-center gap-2 flex-1 pr-2 h-full"
                   >
                     <Search size={18} color="#9ca3af" />
-                    <Text className="flex-1 text-[13px] text-gray-400">
+                    <Text className="flex-1 text-[13px] text-gray-400 font-medium">
                       {searchQuery || "Mau perbaiki apa hari ini?"}
                     </Text>
                   </TouchableOpacity>
@@ -215,9 +227,12 @@ export default function ClientHomePage() {
                       setShowFilterModal(true);
                     }}
                     activeOpacity={0.7}
-                    className="w-8 h-8 rounded-full items-center justify-center bg-gray-50 border border-gray-200 shrink-0"
+                    className="w-8 h-8 rounded-full items-center justify-center bg-gray-50 border border-gray-200 shrink-0 relative"
                   >
-                    <SlidersHorizontal size={14} color="#4b5563" />
+                    <SlidersHorizontal size={14} color={isFilterActive ? "#ff6b00" : "#4b5563"} />
+                    {isFilterActive && (
+                      <View className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#ff6b00] border border-white" />
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -253,7 +268,7 @@ export default function ClientHomePage() {
 
               {/* 5. 8-Grid Category Cards */}
               <View className="px-4 mt-4">
-                <View className="flex-row flex-wrap justify-between gap-y-3">
+                <View className="flex-row flex-wrap justify-between gap-y-3.5">
                   {GRID_CATEGORIES.map((cat) => {
                     const isSelected = selectedCategory === cat.id;
                     return (
@@ -266,21 +281,23 @@ export default function ClientHomePage() {
                             params: { q: cat.label },
                           });
                         }}
-                        activeOpacity={0.8}
+                        activeOpacity={0.75}
                         className="w-[22%] items-center"
                       >
                         <View
-                          className={`w-14 h-14 rounded-2xl items-center justify-center mb-1 border ${isSelected
-                            ? "bg-orange-500 border-orange-600 shadow-md"
-                            : `${cat.bgColor} border-transparent`
+                          className={`w-14 h-14 rounded-2xl items-center justify-center mb-1.5 border ${isSelected
+                            ? "bg-[#ff6b00] border-[#ff6b00] shadow-md"
+                            : `${cat.bgColor} border-black/5`
                             }`}
                         >
-                          {cat.Icon ? <cat.Icon size={26} color={isSelected ? "white" : undefined} /> : <Text className="text-[24px]">{cat.icon}</Text>}
+                          {cat.Icon ? <cat.Icon size={25} color={isSelected ? "white" : undefined} /> : <Text className="text-[22px]">{cat.icon}</Text>}
                         </View>
                         <Text
-                          className={`text-[11px] text-center ${isSelected ? "font-black text-[#ff6b00]" : "font-semibold text-gray-700"
+                          className={`text-[10.5px] text-center leading-tight ${isSelected ? "font-black text-[#ff6b00]" : "font-bold text-gray-800"
                             }`}
                           numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
                         >
                           {cat.label}
                         </Text>
