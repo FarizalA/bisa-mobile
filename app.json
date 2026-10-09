@@ -4,7 +4,7 @@
     "slug": "bisa-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon1.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -20,8 +20,8 @@
     "android": {
       "package": "com.bisaapp.app",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "backgroundColor": "#faf8ff",
+        "foregroundImage": "./assets/icon1.png"
       }
     },
     "web": {
