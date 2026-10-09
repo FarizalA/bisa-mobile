@@ -28,21 +28,29 @@ import {
 } from "lucide-react-native";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser } from "../../src/lib/user-storage";
+import { WebView } from "react-native-webview";
 import { generateRadarLeafletHtml } from "../../src/utils/radarLeafletHtml";
 import { RadarFilterModals } from "../../src/components/radar/RadarFilterModals";
 import BottomNav from "../../src/components/BottomNav";
 
 // MapView hanya di native — web pakai Leaflet iframe 1:1 dengan web ProvidersMap
+// Di-wrap try/catch agar HP tanpa Google Play Services TIDAK force close, fallback ke WebView Leaflet
 let MapView: any = null;
 let Marker: any = null;
 let Circle: any = null;
 let Callout: any = null;
+let mapsLoadError: string | null = null;
 if (Platform.OS !== "web") {
-  const Maps = require("react-native-maps");
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Circle = Maps.Circle;
-  Callout = Maps.Callout;
+  try {
+    const Maps = require("react-native-maps");
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+    Circle = Maps.Circle;
+    Callout = Maps.Callout;
+  } catch (e: any) {
+    mapsLoadError = e?.message || "maps unavailable";
+    MapView = null;
+  }
 }
 
 const KATEGORI_JASA = [
@@ -58,9 +66,17 @@ const KATEGORI_JASA = [
   "Lainnya",
 ];
 
+class MapErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+  constructor(p: any) { super(p); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(e: any) { console.warn("MapView crash caught:", e?.message); }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}
+
 export default function RadarPage() {
   const router = useRouter();
   const mapRef = useRef<any>(null);
+  const webviewRef = useRef<any>(null);
 
   const [user, setUser] = useState<any>(null);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -172,11 +188,15 @@ export default function RadarPage() {
   const handleRecenter = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (Platform.OS === "web") {
-      const el: any = document.getElementById("radar-iframe") as any;
+      const el: any = (globalThis as any).document?.getElementById("radar-iframe") as any;
       el?.contentWindow?.postMessage({ type: "RECENTER" }, "*");
-    } else if (location && mapRef.current) {
-      const delta = radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05;
-      mapRef.current.animateToRegion({ latitude: location.lat, longitude: location.lng, latitudeDelta: delta, longitudeDelta: delta }, 800);
+    } else if (webviewRef.current && !MapView) {
+      try { webviewRef.current.postMessage(JSON.stringify({ type: "RECENTER" })); } catch {}
+    } else if (location && mapRef.current?.animateToRegion) {
+      try {
+        const delta = radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05;
+        mapRef.current.animateToRegion({ latitude: location.lat, longitude: location.lng, latitudeDelta: delta, longitudeDelta: delta }, 800);
+      } catch (e) { console.warn("recenter failed:", e); }
     }
   };
 
@@ -210,53 +230,79 @@ export default function RadarPage() {
     );
   }, [location, radius, providers]);
 
+  const fallbackWebView = (
+    <WebView
+      ref={webviewRef}
+      originWhitelist={["*"]}
+      source={{ html: leafletHTML }}
+      style={{ width: "100%", height: "100%" }}
+      javaScriptEnabled
+      domStorageEnabled
+    />
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="flex-1 relative">
         {location ? (
           Platform.OS === "web" ? (
             <iframe id="radar-iframe" srcDoc={leafletHTML} style={{ width: "100%", height: "100%", border: "none" }} title="Radar Map" />
-          ) : (
-            <MapView
-              ref={mapRef}
-              style={{ width: "100%", height: "100%" }}
-              initialRegion={{ latitude: location.lat, longitude: location.lng, latitudeDelta: radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05, longitudeDelta: radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05 }}
-              showsUserLocation
-              showsMyLocationButton={false}
-            >
-              {radius < 100 ? <Circle center={{ latitude: location.lat, longitude: location.lng }} radius={radius * 1000} strokeColor="#3b82f6" fillColor="rgba(59,130,246,0.08)" strokeWidth={1} /> : null}
-              {providers.map((prov) => {
-                const isSuper = prov.radar_boost_level === "super";
-                const isMenyala = prov.radar_boost_level === "menyala";
-                return (
-                  <Marker key={prov.id} coordinate={{ latitude: Number(prov.latitude), longitude: Number(prov.longitude) }} tracksViewChanges={false}>
-                    <View className="items-center justify-center">
-                      <View className={`w-9 h-9 rounded-full items-center justify-center p-0.5 shadow-md ${isSuper ? "bg-amber-400 border-2 border-white" : isMenyala ? "bg-sky-400 border-2 border-white" : "bg-orange-500 border-2 border-white"}`}>
-                        <Image source={prov.face_url ? { uri: prov.face_url } : require("../../assets/mascot.png")} style={{ width: "100%", height: "100%", borderRadius: 18 }} resizeMode="cover" />
-                        {Boolean(prov.is_trusted) ? <View className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-white items-center justify-center" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}><Text style={{ fontSize: 7, color: "#ea580c" }}>★</Text></View> : null}
+          ) : MapView ? (
+            <MapErrorBoundary fallback={fallbackWebView}>
+              <MapView
+                ref={mapRef}
+                style={{ width: "100%", height: "100%" }}
+                initialRegion={{
+                  latitude: location.lat,
+                  longitude: location.lng,
+                  latitudeDelta: radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05,
+                  longitudeDelta: radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05,
+                }}
+                showsUserLocation
+                showsMyLocationButton={false}
+              >
+                {radius < 100 ? (
+                  <Circle
+                    center={{ latitude: location.lat, longitude: location.lng }}
+                    radius={radius * 1000}
+                    strokeColor="#3b82f6"
+                    fillColor="rgba(59,130,246,0.08)"
+                    strokeWidth={1}
+                  />
+                ) : null}
+                {providers.map((prov) => {
+                  const isSuper = prov.radar_boost_level === "super";
+                  const isMenyala = prov.radar_boost_level === "menyala";
+                  return (
+                    <Marker
+                      key={prov.id}
+                      coordinate={{ latitude: Number(prov.latitude), longitude: Number(prov.longitude) }}
+                      tracksViewChanges={false}
+                    >
+                      <View style={{ alignItems: "center", justifyContent: "center" }}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", padding: 2, backgroundColor: isSuper ? "#fbbf24" : isMenyala ? "#38bdf8" : "#f97316" }}>
+                          <Image
+                            source={prov.face_url ? { uri: prov.face_url } : require("../../assets/mascot.png")}
+                            style={{ width: "100%", height: "100%", borderRadius: 18 }}
+                            resizeMode="cover"
+                          />
+                        </View>
                       </View>
-                      <View className={`w-1.5 h-1.5 rotate-45 -mt-1 ${isSuper ? "bg-amber-400" : isMenyala ? "bg-sky-400" : "bg-orange-500"}`} />
-                    </View>
-                    <Callout tooltip onPress={() => router.push(`/profil/${prov.id}` as any)}>
-                      <View className="bg-white rounded-2xl p-3 shadow-xl border border-gray-100 w-48 flex-col gap-2">
-                        <View className="flex-row items-center gap-2">
-                          <Image source={prov.face_url ? { uri: prov.face_url } : require("../../assets/mascot.png")} style={{ width: 40, height: 40, borderRadius: 20 }} className="bg-gray-100" />
-                          <View className="flex-1 min-w-0">
-                            <Text className="font-extrabold text-sm text-slate-900" numberOfLines={1}>{prov.name}</Text>
-                            <Text className="text-[10px] text-gray-500" numberOfLines={1}>{(prov.keahlian || "Penyedia Jasa").replace(/^Lainnya:\s*/i, "")}</Text>
+                      {Callout ? (
+                        <Callout tooltip onPress={() => router.push(`/profil/${prov.id}` as any)}>
+                          <View style={{ backgroundColor: "#ffffff", borderRadius: 16, padding: 12, width: 192 }}>
+                            <Text style={{ fontWeight: "bold", fontSize: 13, color: "#0f172a" }}>{prov.name}</Text>
+                            <Text style={{ fontSize: 10, color: "#64748b" }}>{(prov.keahlian || "Penyedia Jasa").replace(/^Lainnya:\s*/i, "")}</Text>
                           </View>
-                        </View>
-                        <View className="flex-row items-center justify-between pt-2 border-t border-gray-100">
-                          <View className="flex-row items-center gap-0.5"><Star size={12} color="#f59e0b" fill="#f59e0b" /><Text className="text-xs font-bold text-gray-800">{prov.rating ? Number(prov.rating).toFixed(1) : "New"}</Text></View>
-                          <Text className="text-xs font-black text-orange-600">{prov.base_price ? `Rp${Number(prov.base_price).toLocaleString("id-ID")}` : "Rp -"}</Text>
-                        </View>
-                        <View className="bg-orange-600 py-1.5 rounded-lg items-center flex-row justify-center gap-1 mt-1"><Text className="text-white text-xs font-bold">Lihat Profil</Text><ChevronRight size={12} color="white" /></View>
-                      </View>
-                    </Callout>
-                  </Marker>
-                );
-              })}
-            </MapView>
+                        </Callout>
+                      ) : null}
+                    </Marker>
+                  );
+                })}
+              </MapView>
+            </MapErrorBoundary>
+          ) : (
+            fallbackWebView
           )
         ) : (
           <View className="flex-1 items-center justify-center bg-gray-100"><ActivityIndicator color="#ff6b00" size="large" /><Text className="text-xs font-bold text-gray-500 mt-2">Menunggu lokasi...</Text></View>
