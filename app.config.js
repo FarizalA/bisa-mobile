@@ -9,7 +9,7 @@ export default ({ config }) => ({
     icon: "./assets/icon1.png",
     userInterfaceStyle: "light",
     splash: {
-      image: "./assets/icon1.png",
+      image: "./assets/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#ffffff",
     },
