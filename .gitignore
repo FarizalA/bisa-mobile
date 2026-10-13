@@ -42,3 +42,8 @@ yarn-error.*
 
 # next.js build artifacts (accidental)
 .next/
+
+# Build artifacts
+apk-build/
+*.apk
+*.aab
