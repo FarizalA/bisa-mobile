@@ -134,19 +134,6 @@ export function PopupProvider({ children }: { children: React.ReactNode }) {
             <View style={{ backgroundColor: btnColor }} className="h-1.5 w-full" />
 
             <View className="px-6 pt-5 pb-6 items-center">
-              {/* Theme Badge */}
-              <View
-                style={{ backgroundColor: isProvider ? "#ECFDF5" : "#FFF7ED" }}
-                className="px-3 py-1 rounded-full mb-3"
-              >
-                <Text
-                  style={{ color: isProvider ? "#047857" : "#EA580C" }}
-                  className="text-[10px] font-black uppercase tracking-wider"
-                >
-                  {isProvider ? "Mitra BISA" : "Klien BISA"}
-                </Text>
-              </View>
-
               <PopupIcon type={t} themeColor={themeColor} themeBg={themeBg} />
 
               <Text className="text-[16px] font-black text-gray-900 text-center leading-tight mt-3">

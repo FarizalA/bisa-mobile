@@ -7,7 +7,15 @@ import { getStoredUser } from "../lib/user-storage";
 import { ProviderItem } from "../components/home/ProviderCard";
 import { ensureConversationAndNavigate } from "../lib/chatInbox";
 
-// Memory cache biar Beranda tidak download ulang tiap balik halaman (hemat kuota & anti muter)
+// Helper thumbnail Supabase (transformasi foto jadi kecil & enteng di RAM)
+function getOptimizedThumbnail(url?: string | null) {
+  if (!url || !url.startsWith("http")) return null;
+  // Jika dari Supabase Storage, tambahkan parameter transformasi agar tidak makan RAM
+  if (url.includes("supabase.co") && !url.includes("?")) {
+    return `${url}?width=200&height=200&resize=cover&quality=70`;
+  }
+  return url;
+}
 let _cachedProviders: ProviderItem[] | null = null;
 let _cachedAt = 0;
 const CACHE_TTL = 2 * 60 * 1000; // 2 menit
@@ -49,52 +57,66 @@ export function useHomeLogic() {
             setLocationName(stored.alamat_singkat);
           }
 
-          // 2. Fetch fresh user data dari Supabase (berjalan di background)
-          const { data: freshUser } = await supabase
-            .from("users_bisa")
-            .select("*")
-            .eq("id", stored.id)
-            .single();
+          // 2. Fetch fresh user data dari Supabase (non-blocking IIFE)
+          (async () => {
+            try {
+              const { data: freshUser } = await supabase
+                .from("users_bisa")
+                .select("*")
+                .eq("id", stored.id)
+                .single();
+              if (freshUser) {
+                setUser(freshUser);
+                if (freshUser.alamat_singkat) {
+                  setLocationName(freshUser.alamat_singkat);
+                }
+              }
+            } catch (e) { }
+          })();
 
-          if (freshUser) {
-            setUser(freshUser);
-            if (freshUser.alamat_singkat) {
-              setLocationName(freshUser.alamat_singkat);
-            }
-          }
-
-          // Fetch unread notifications count
-          const { count: unreadCount } = await supabase
-            .from("notifikasi_bisa")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", stored.id)
-            .eq("is_read", false);
-
-          if (unreadCount !== null) {
-            setUnreadNotifCount(unreadCount);
-          }
+          // Fetch unread notifications count (non-blocking IIFE)
+          (async () => {
+            try {
+              const { count: unreadCount } = await supabase
+                .from("notifikasi_bisa")
+                .select("*", { count: "exact", head: true })
+                .eq("user_id", stored.id)
+                .eq("is_read", false);
+              if (unreadCount !== null) {
+                setUnreadNotifCount(unreadCount);
+              }
+            } catch (e) { }
+          })();
         }
 
-        // GPS Geolocation
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === "granted") {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          setUserCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-
+        // GPS Geolocation (non-blocking IIFE dengan timeout agar tidak menghambat UI)
+        (async () => {
           try {
-            const resp = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}`
-            );
-            const data = await resp.json();
-            const sub =
-              data?.address?.suburb ||
-              data?.address?.village ||
-              data?.address?.town ||
-              data?.address?.city_district ||
-              data?.address?.city;
-            if (sub) setLocationName(sub);
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === "granted") {
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+              setUserCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+
+              try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const resp = await fetch(
+                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}`,
+                  { signal: controller.signal }
+                );
+                const data = await resp.json();
+                clearTimeout(timeoutId);
+                const sub =
+                  data?.address?.suburb ||
+                  data?.address?.village ||
+                  data?.address?.town ||
+                  data?.address?.city_district ||
+                  data?.address?.city;
+                if (sub) setLocationName(sub);
+              } catch (e) { }
+            }
           } catch (e) { }
-        }
+        })();
       } catch (err) {
         console.error("Session init error:", err);
       }
@@ -111,10 +133,30 @@ export function useHomeLogic() {
       setProviders(_cachedProviders!);
       setLoading(false);
       // Tetap fetch silent di background untuk update diam-diam
-      fetchProviders({ silent: true });
+      // fetchProviders({ silent: true }); // Removed to avoid circular dependency / access before declaration
+      (async () => {
+        try {
+          const lat = userCoords?.lat || -7.311;
+          const lng = userCoords?.lng || 108.764;
+          const { data: rpcData } = await supabase.rpc("get_nearby_providers", {
+            client_lat: lat, client_lon: lng, search_radius_km: 25,
+            search_query: searchQuery || "", filter_kategori: selectedCategory || "Semua Jasa",
+            min_rating: minRating, filter_trusted: onlyTrusted, sort_by: sortBy,
+            exclude_client_id: user?.id || 0,
+          });
+          if (rpcData) setProviders(rpcData.map((p: any) => ({ ...p, id: p.id })));
+        } catch {}
+      })();
       return;
     }
     if (!opts?.silent) setLoading(true);
+
+    // Timeout pengaman agar skeleton tidak gantung terus jika jaringan lambat
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      setRefreshing(false);
+    }, 6000);
+
     try {
       const lat = userCoords?.lat || -7.311;
       const lng = userCoords?.lng || 108.764;
@@ -149,7 +191,7 @@ export function useHomeLogic() {
           subscription_until: p.subscription_until || null,
           is_available: p.is_available,
           status: p.status,
-          face_url: p.face_url && p.face_url.startsWith("http") ? p.face_url : null,
+          face_url: getOptimizedThumbnail(p.face_url),
         }));
         _cachedProviders = enriched;
         _cachedAt = Date.now();
@@ -157,11 +199,11 @@ export function useHomeLogic() {
         return;
       }
 
-      // 2. Fallback direct query on users_bisa
+      // 2. Fallback direct query on users_bisa (dibatasi 10 item awal agar ringan & hemat RAM/kuota)
       let query = supabase
         .from("users_bisa")
         .select(
-          "id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until"
+          "id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, kategori, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until"
         )
         .or("kyc_status.eq.Terverifikasi,kyc_status.eq.approved");
 
@@ -169,7 +211,7 @@ export function useHomeLogic() {
         query = query.neq("id", user.id);
       }
 
-      const { data: dbProviders, error } = await query.limit(50);
+      const { data: dbProviders, error } = await query.limit(10);
 
       if (error) {
         console.error("Fetch providers error:", error);
@@ -195,6 +237,7 @@ export function useHomeLogic() {
             id: p.id,
             name: p.name || "Mitra BISA",
             skill: p.keahlian || p.keahlian_detail || "Jasa Umum",
+            kategori: (p as any).kategori || null,
             price: typeof p.base_price === "number" ? p.base_price : 0,
             rating: typeof p.rating === "number" ? p.rating : 0,
             total_orders: p.total_orders || 0,
@@ -205,7 +248,7 @@ export function useHomeLogic() {
             subscription_until: p.subscription_until || null,
             is_available: p.is_available,
             status: p.status,
-            face_url: p.face_url && p.face_url.startsWith("http") ? p.face_url : null,
+            face_url: getOptimizedThumbnail(p.face_url),
           };
         });
 
@@ -216,14 +259,15 @@ export function useHomeLogic() {
     } catch (err) {
       console.error("fetchProviders catch:", err);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
       setRefreshing(false);
     }
   }, [user?.id, userCoords, searchQuery, selectedCategory, minRating, onlyTrusted, sortBy]);
 
   useEffect(() => {
-    if (user) fetchProviders();
-  }, [user, fetchProviders]);
+    fetchProviders();
+  }, [fetchProviders]);
 
   const onRefresh = () => {
     _cachedProviders = null;
@@ -267,7 +311,7 @@ export function useHomeLogic() {
 
     const matchesCategory =
       !selectedCategory ||
-      (p.skill && p.skill.toLowerCase().includes(selectedCategory.toLowerCase()));
+      (p.kategori ? p.kategori.toLowerCase() === selectedCategory.toLowerCase() : (p.skill && p.skill.toLowerCase().includes(selectedCategory.toLowerCase())));
 
     const matchesRating = !minRating || (p.rating ?? 0) >= minRating;
     const matchesTrusted = !onlyTrusted || p.is_trusted;

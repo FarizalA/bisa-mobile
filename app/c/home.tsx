@@ -1,21 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  TextInput,
+  FlatList,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Search,
   MapPin,
   Bell,
   Star,
-  SlidersHorizontal,
   ChevronRight,
   ChevronDown,
   Briefcase,
@@ -23,12 +21,10 @@ import {
 import * as Haptics from "expo-haptics";
 import { useHomeLogic } from "../../src/hooks/useHomeLogic";
 import { supabase } from "../../src/lib/supabase";
-import BottomNav from "../../src/components/BottomNav";
 import ProviderCard from "../../src/components/home/ProviderCard";
-import HomeFilterModal from "../../src/components/home/HomeFilterModal";
 import NotificationSheet from "../../src/components/home/NotificationSheet";
 import { GRID_CATEGORIES, BoltIcon } from "../../src/components/home/HomeConstants";
-import HomeMarketplaceView from "../../src/components/home/HomeMarketplaceView";
+import { FlashList } from "@shopify/flash-list";
 
 export default function ClientHomePage() {
   const {
@@ -40,34 +36,19 @@ export default function ClientHomePage() {
     refreshing,
     onRefresh,
     unreadNotifCount,
-    searchQuery,
-    setSearchQuery,
     activeSegment,
     setActiveSegment,
     selectedCategory,
-    setSelectedCategory,
     locationName,
-    showFilterModal,
-    setShowFilterModal,
-    minRating,
-    setMinRating,
-    sortBy,
-    setSortBy,
-    onlyTrusted,
-    setOnlyTrusted,
     rekomendasiFilter,
     setRekomendasiFilter,
     handleStartChat,
-    handleResetFilters,
-    isSearchMode,
-    setIsSearchMode,
   } = useHomeLogic();
 
-
-
-  // Notifikasi bottom-sheet (mirip p/home tapi tema orange client)
+  // Notifikasi bottom-sheet
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [rekomendasiVisible, setRekomendasiVisible] = useState(12);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -101,74 +82,84 @@ export default function ClientHomePage() {
     return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
   }, [user?.name]);
 
-  const isFilterActive = minRating > 0 || onlyTrusted || sortBy !== "terdekat";
+  // Masonry infinite scroll
+  const visibleRekomendasi = React.useMemo(
+    () => filteredProviders.slice(0, rekomendasiVisible),
+    [filteredProviders, rekomendasiVisible]
+  );
+
+  const renderRekomendasiItem = useCallback(
+    ({ item }: { item: any }) => (
+      <View style={{ paddingHorizontal: 6, paddingBottom: 12 }}>
+        <ProviderCard
+          item={item}
+          variant="grid"
+          onPress={() => router.push(`/profil/${item.id}` as any)}
+          onChatPress={() => handleStartChat(item.id)}
+        />
+      </View>
+    ),
+    [router, handleStartChat]
+  );
+
+  const keyExtractorRekomendasi = useCallback((item: any) => `rek-${item.id}`, []);
+
+  useEffect(() => {
+    setRekomendasiVisible(12);
+  }, [rekomendasiFilter, selectedCategory]);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      {isSearchMode ? (
-        <>
-          <HomeMarketplaceView
-            router={router}
-            filteredProviders={filteredProviders}
-            loading={loading}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-            locationName={locationName}
-            notifBadge={notifBadge}
-            setShowNotifications={setShowNotifications}
-            setIsSearchMode={setIsSearchMode}
-            handleStartChat={handleStartChat}
-          />
-          <BottomNav active="home" />
-        </>
-      ) : (
-        <>
-          {/* 1. Header Bar: Menggunakan Logo PNG Kiri Atas */}
-          <View className="bg-white px-4 pt-2 pb-2 flex-row items-center justify-between border-b border-gray-100">
-            <Image
-              source={require("../../assets/logo.png")}
-              style={{ width: 95, height: 32 }}
-              contentFit="contain"
-            />
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+      {/* 1. Header Bar: Fixed di atas */}
+      <View className="bg-white px-4 pt-2 pb-2 flex-row items-center justify-between border-b border-gray-100">
+        <Image
+          source={require("../../assets/logo.png")}
+          style={{ width: 95, height: 32 }}
+          contentFit="contain"
+        />
 
-            <View className="flex-row items-center gap-2">
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.replace("/p/home" as any);
-                }}
-                activeOpacity={0.88}
-                className="px-3.5 py-1.5 bg-orange-100 border border-orange-200 rounded-full flex-row items-center gap-1"
-              >
-                <Text className="text-[11px] font-black text-[#ff6b00]">⇆ Jadi Mitra</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setShowNotifications(true);
-                }}
-                className="w-9 h-9 rounded-full bg-orange-50 items-center justify-center relative"
-              >
-                <Bell size={18} color="#ff6b00" />
-                {notifBadge > 0 && (
-                  <View className="absolute -top-0.5 -right-0.5 bg-red-600 min-w-[16px] h-[16px] px-1 rounded-full items-center justify-center border border-white">
-                    <Text className="text-white text-[9px] font-black">
-                      {notifBadge > 9 ? "9+" : notifBadge}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: 24 }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ff6b00"]} />}
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.replace("/p/home" as any);
+            }}
+            activeOpacity={0.88}
+            className="px-3.5 py-1.5 bg-orange-100 border border-orange-200 rounded-full flex-row items-center gap-1"
           >
+            <Text className="text-[11px] font-black text-[#ff6b00]">⇆ Jadi Mitra</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowNotifications(true);
+            }}
+            className="w-9 h-9 rounded-full bg-orange-50 items-center justify-center relative"
+          >
+            <Bell size={18} color="#ff6b00" />
+            {notifBadge > 0 && (
+              <View className="absolute -top-0.5 -right-0.5 bg-red-600 min-w-[16px] h-[16px] px-1 rounded-full items-center justify-center border border-white">
+                <Text className="text-white text-[9px] font-black">
+                  {notifBadge > 9 ? "9+" : notifBadge}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* MASONRY 2-kolom: Feed utama */}
+      <View style={{ flex: 1 }}>
+        <FlashList
+          data={visibleRekomendasi}
+          keyExtractor={keyExtractorRekomendasi}
+          numColumns={2}
+          renderItem={renderRekomendasiItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ff6b00"]} />}
+          ListHeaderComponent={
             <View className="max-w-[420px] w-full self-center">
               {/* 2. Greeting Bar */}
               <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
@@ -187,7 +178,6 @@ export default function ClientHomePage() {
                         </Text>
                       )}
                     </TouchableOpacity>
-                    {/* Badge Online presisi tanpa terpotong overflow */}
                     <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
                   </View>
 
@@ -207,46 +197,14 @@ export default function ClientHomePage() {
                 </View>
               </View>
 
-              {/* 3. Search Bar Input */}
+              {/* 3. Segment Switcher Tabs */}
               <View className="px-4 mt-2">
-                <View className="h-12 bg-white border border-gray-200 rounded-full px-4 flex-row items-center justify-between shadow-sm">
-                  <TouchableOpacity
-                    onPress={() => setIsSearchMode(true)}
-                    activeOpacity={0.9}
-                    className="flex-row items-center gap-2 flex-1 pr-2 h-full"
-                  >
-                    <Search size={18} color="#9ca3af" />
-                    <Text className="flex-1 text-[13px] text-gray-400 font-medium">
-                      {searchQuery || "Mau perbaiki apa hari ini?"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setShowFilterModal(true);
-                    }}
-                    activeOpacity={0.7}
-                    className="w-8 h-8 rounded-full items-center justify-center bg-gray-50 border border-gray-200 shrink-0 relative"
-                  >
-                    <SlidersHorizontal size={14} color={isFilterActive ? "#ff6b00" : "#4b5563"} />
-                    {isFilterActive && (
-                      <View className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#ff6b00] border border-white" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* 4. Segment Switcher Tabs — animasi halus slide pill */}
-              <View className="px-4 mt-3">
                 <View className="bg-gray-100 p-1 rounded-full flex-row items-center shadow-inner relative">
                   <TouchableOpacity
                     onPress={() => setActiveSegment("cari")}
                     activeOpacity={0.9}
-                    className={`flex-1 py-2 rounded-full flex-row items-center justify-center gap-1.5 z-10 ${activeSegment === "cari" ? "bg-[#ff6b00] shadow-sm" : ""
-                      }`}
+                    className={`flex-1 py-2 rounded-full flex-row items-center justify-center gap-1.5 z-10 ${activeSegment === "cari" ? "bg-[#ff6b00] shadow-sm" : ""}`}
                   >
-                    <Search size={15} color={activeSegment === "cari" ? "#ffffff" : "#4b5563"} />
                     <Text className={`text-sm font-semibold ${activeSegment === "cari" ? "text-white" : "text-gray-600"}`}>
                       Cari Jasa
                     </Text>
@@ -266,7 +224,7 @@ export default function ClientHomePage() {
                 </View>
               </View>
 
-              {/* 5. 8-Grid Category Cards */}
+              {/* 4. 8-Grid Category Cards */}
               <View className="px-4 mt-4">
                 <View className="flex-row flex-wrap justify-between gap-y-3.5">
                   {GRID_CATEGORIES.map((cat) => {
@@ -293,8 +251,7 @@ export default function ClientHomePage() {
                           {cat.Icon ? <cat.Icon size={25} color={isSelected ? "white" : undefined} /> : <Text className="text-[22px]">{cat.icon}</Text>}
                         </View>
                         <Text
-                          className={`text-[10.5px] text-center leading-tight ${isSelected ? "font-black text-[#ff6b00]" : "font-bold text-gray-800"
-                            }`}
+                          className={`text-[10.5px] text-center leading-tight ${isSelected ? "font-black text-[#ff6b00]" : "font-bold text-gray-800"}`}
                           numberOfLines={1}
                           adjustsFontSizeToFit
                           minimumFontScale={0.85}
@@ -307,9 +264,9 @@ export default function ClientHomePage() {
                 </View>
               </View>
 
-              {/* 6. Solusi Cepat Banner Card - disesuaikan plek web */}
+              {/* 5. Solusi Cepat Banner Card */}
               <View className="px-4 mt-5">
-                <View className="bg-gradient-to-r from-orange-50 via-orange-50 to-orange-100 border border-orange-100 rounded-3xl px-4 py-4 flex-row items-center justify-between relative overflow-hidden">
+                <View className="rounded-3xl px-4 py-4 flex-row items-center justify-between relative overflow-hidden border" style={{ backgroundColor: "#FFF7ED", borderColor: "#FFEDD5" }}>
                   <View className="flex-1 pr-2 z-10">
                     <View className="bg-orange-600 px-2.5 py-1 rounded-full self-start mb-2 shadow-sm">
                       <Text className="text-white text-[10px] font-bold tracking-wide">Solusi Cepat</Text>
@@ -341,7 +298,7 @@ export default function ClientHomePage() {
                 </View>
               </View>
 
-              {/* 7. Section: Tersedia Sekarang (Persis Web) */}
+              {/* 6. Section: Tersedia Sekarang */}
               <View className="mt-6 pb-2">
                 <View className="px-4 flex-row items-center justify-between mb-3">
                   <View>
@@ -365,11 +322,19 @@ export default function ClientHomePage() {
                 </View>
 
                 {loading && !refreshing ? (
-                  // Show a lightweight skeleton placeholder instead of a big spinner
-                  <View className="flex-row gap-2 px-4 py-4">
-                    {/* 3‑item carousel skeleton */}
-                    {[1,2,3].map((i) => (
-                      <View key={i} className="w-36 h-36 bg-gray-200 rounded-xl" />
+                  <View className="flex-row gap-3 px-4 py-2">
+                    {[1, 2, 3].map((i) => (
+                      <View key={i} className="w-[170px] bg-white border border-gray-100 rounded-2xl p-3 gap-3 overflow-hidden opacity-70">
+                        <View className="flex-row items-center gap-2">
+                          <View className="w-10 h-10 rounded-full bg-gray-200 animate-pulse" />
+                          <View className="gap-1.5 flex-1">
+                            <View className="h-3 w-3/4 bg-gray-200 rounded-full animate-pulse" />
+                            <View className="h-2.5 w-1/2 bg-gray-200 rounded-full animate-pulse" />
+                          </View>
+                        </View>
+                        <View className="h-4 w-full bg-gray-200 rounded-full animate-pulse my-1" />
+                        <View className="h-8 w-full bg-slate-100 rounded-xl animate-pulse" />
+                      </View>
                     ))}
                   </View>
                 ) : (availableProviders ?? filteredProviders).length === 0 ? (
@@ -383,133 +348,136 @@ export default function ClientHomePage() {
                     </Text>
                   </View>
                 ) : (
-                  <ScrollView
+                  <FlatList
                     horizontal
+                    data={availableProviders ?? filteredProviders}
+                    keyExtractor={(item) => `avail-${item.id}`}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{ paddingHorizontal: 16 }}
-                  >
-                    {(availableProviders ?? filteredProviders).map((item) => (
+                    initialNumToRender={5}
+                    maxToRenderPerBatch={3}
+                    windowSize={3}
+                    removeClippedSubviews={true}
+                    getItemLayout={(_, index) => ({
+                      length: 182,
+                      offset: 182 * index,
+                      index,
+                    })}
+                    renderItem={({ item }) => (
                       <ProviderCard
-                        key={item.id}
                         item={item}
                         variant="carousel"
                         onPress={() => router.push(`/profil/${item.id}` as any)}
                         onChatPress={() => handleStartChat(item.id)}
                       />
-                    ))}
-                  </ScrollView>
+                    )}
+                  />
                 )}
               </View>
 
-              {/* 8. Rekomendasi Terdekat 2-Column Grid */}
-              <View className="px-4 mt-6">
+              {/* 7. Header Rekomendasi Terdekat */}
+              <View className="px-4 mt-2">
                 <Text className="text-[16px] font-black text-gray-900">Rekomendasi Terdekat</Text>
                 <Text className="text-[11px] text-gray-400 mb-3">Paling banyak dipesan di sekitarmu</Text>
 
-                {/* Rekomendasi Filter Pills */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8, marginBottom: 14 }}
-                >
-                  <TouchableOpacity
-                    onPress={() => setRekomendasiFilter("semua")}
-                    className={`px-4 py-2 rounded-full border ${rekomendasiFilter === "semua"
+                <View style={{ height: 42, marginBottom: 14 }}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8, alignItems: "center" }}
+                    style={{ flexGrow: 0 }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => setRekomendasiFilter("semua")}
+                      className={`h-9 px-4 rounded-full border items-center justify-center shrink-0 ${rekomendasiFilter === "semua"
                         ? "bg-[#0f172a] border-[#0f172a]"
                         : "bg-gray-100 border-gray-200"
-                      }`}
-                  >
-                    <Text
-                      className={`text-[12px] ${rekomendasiFilter === "semua" ? "text-white font-black" : "text-gray-700 font-bold"
                         }`}
                     >
-                      Semua
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        className={`text-[12px] ${rekomendasiFilter === "semua" ? "text-white font-black" : "text-gray-700 font-bold"}`}
+                      >
+                        Semua
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => setRekomendasiFilter("rating")}
-                    className={`px-4 py-2 rounded-full flex-row items-center gap-1.5 border ${rekomendasiFilter === "rating"
+                    <TouchableOpacity
+                      onPress={() => setRekomendasiFilter("rating")}
+                      className={`h-9 px-4 rounded-full flex-row items-center gap-1.5 border shrink-0 ${rekomendasiFilter === "rating"
                         ? "bg-amber-500 border-amber-500"
                         : "bg-[#fff8f0] border-[#ffedd5]"
-                      }`}
-                  >
-                    <Star
-                      size={13}
-                      color={rekomendasiFilter === "rating" ? "white" : "#f59e0b"}
-                      fill={rekomendasiFilter === "rating" ? "white" : "#f59e0b"}
-                    />
-                    <Text
-                      className={`text-[12px] ${rekomendasiFilter === "rating" ? "text-white font-black" : "text-[#c2410c] font-black"
                         }`}
                     >
-                      Rating 4.8+
-                    </Text>
-                  </TouchableOpacity>
+                      <Star
+                        size={13}
+                        color={rekomendasiFilter === "rating" ? "white" : "#f59e0b"}
+                        fill={rekomendasiFilter === "rating" ? "white" : "#f59e0b"}
+                      />
+                      <Text
+                        className={`text-[12px] ${rekomendasiFilter === "rating" ? "text-white font-black" : "text-[#c2410c] font-black"}`}
+                      >
+                        Rating 4.8+
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => setRekomendasiFilter("terjangkau")}
-                    className={`px-4 py-2 rounded-full border ${rekomendasiFilter === "terjangkau"
+                    <TouchableOpacity
+                      onPress={() => setRekomendasiFilter("terjangkau")}
+                      className={`h-9 px-4 rounded-full border items-center justify-center shrink-0 ${rekomendasiFilter === "terjangkau"
                         ? "bg-blue-600 border-blue-600"
                         : "bg-[#eff6ff] border-[#dbeafe]"
-                      }`}
-                  >
-                    <Text
-                      className={`text-[12px] ${rekomendasiFilter === "terjangkau" ? "text-white font-black" : "text-[#2563eb] font-black"
                         }`}
                     >
-                      Harga Terjangkau
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        className={`text-[12px] ${rekomendasiFilter === "terjangkau" ? "text-white font-black" : "text-[#2563eb] font-black"}`}
+                      >
+                        Harga Terjangkau
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => setRekomendasiFilter("terpercaya")}
-                    className={`px-4 py-2 rounded-full border ${rekomendasiFilter === "terpercaya"
+                    <TouchableOpacity
+                      onPress={() => setRekomendasiFilter("terpercaya")}
+                      className={`h-9 px-4 rounded-full border items-center justify-center shrink-0 ${rekomendasiFilter === "terpercaya"
                         ? "bg-slate-700 border-slate-700"
                         : "bg-[#f1f5f9] border-[#e2e8f0]"
-                      }`}
-                  >
-                    <Text
-                      className={`text-[12px] ${rekomendasiFilter === "terpercaya" ? "text-white font-black" : "text-[#334155] font-black"
                         }`}
                     >
-                      Mitra Unggulan
-                    </Text>
-                  </TouchableOpacity>
-                </ScrollView>
-
-                {/* 2-Column Grid Cards */}
-                <View className="flex-row flex-wrap justify-between">
-                  {filteredProviders.map((item) => (
-                    <ProviderCard
-                      key={item.id}
-                      item={item}
-                      variant="grid"
-                      onPress={() => router.push(`/profil/${item.id}` as any)}
-                      onChatPress={() => handleStartChat(item.id)}
-                    />
-                  ))}
+                      <Text
+                        className={`text-[12px] ${rekomendasiFilter === "terpercaya" ? "text-white font-black" : "text-[#334155] font-black"}`}
+                      >
+                        Mitra Unggulan
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
                 </View>
               </View>
             </View>
-          </ScrollView>
-
-          <BottomNav active="home" />
-        </>
-      )}
-
-      {/* Shared Filter Modal */}
-      <HomeFilterModal
-        visible={showFilterModal}
-        onClose={() => setShowFilterModal(false)}
-        minRating={minRating}
-        setMinRating={setMinRating}
-        sortBy={sortBy}
-        setSortBy={setSortBy}
-        onlyTrusted={onlyTrusted}
-        setOnlyTrusted={setOnlyTrusted}
-        onReset={handleResetFilters}
-      />
+          }
+          ListEmptyComponent={
+            !loading && visibleRekomendasi.length === 0 ? (
+              <View className="mx-4 mt-2 bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-6 items-center max-w-[420px] w-full self-center">
+                <Text className="text-sm font-bold text-gray-600 text-center">Belum ada rekomendasi</Text>
+                <Text className="text-[11px] text-gray-400 text-center mt-1">Coba ganti filter di atas</Text>
+              </View>
+            ) : null
+          }
+          onEndReached={() => {
+            if (visibleRekomendasi.length < filteredProviders.length) {
+              setRekomendasiVisible((v) => Math.min(v + 12, filteredProviders.length));
+            }
+          }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={
+            visibleRekomendasi.length < filteredProviders.length ? (
+              <View className="items-center py-4 max-w-[420px] w-full self-center">
+                <ActivityIndicator size="small" color="#ff6b00" />
+                <Text className="text-[11px] text-gray-400 mt-1.5">Memuat rekomendasi…</Text>
+              </View>
+            ) : (
+              <View style={{ height: 28 }} />
+            )
+          }
+        />
+      </View>
 
       <NotificationSheet
         visible={showNotifications}

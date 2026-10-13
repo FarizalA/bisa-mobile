@@ -11,7 +11,6 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Star } from "lucide-react-native";
 import { supabase } from "../../../src/lib/supabase";
 import { getStoredUser } from "../../../src/lib/user-storage";
-import BottomNav from "../../../src/components/BottomNav";
 import { safeBack } from "@/lib/navigation";
 
 export default function UlasanClientPage() {
@@ -77,7 +76,7 @@ export default function UlasanClientPage() {
     <SafeAreaView className="flex-1 bg-[#FAFAFA]" edges={["top"]}>
       {/* HEADER - 1:1 web/c/ulasan */}
       <View className="h-16 px-4 flex-row items-center bg-white border-b border-gray-100">
-        <TouchableOpacity onPress={() => safeBack(router, "/c/aktivitas")} className="w-10 h-10 rounded-full items-center justify-center mr-3">
+        <TouchableOpacity onPress={() => router.replace("/c/profil" as any)} className="w-10 h-10 rounded-full items-center justify-center mr-3">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-[17px] font-extrabold text-gray-900 tracking-tight">Rating & Ulasan</Text>
@@ -136,8 +135,6 @@ export default function UlasanClientPage() {
           </View>
         </View>
       </ScrollView>
-
-      <BottomNav active="profil" />
     </SafeAreaView>
   );
 }

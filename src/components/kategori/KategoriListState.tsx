@@ -16,7 +16,7 @@ export function KategoriPromoBanner() {
           <Text className="text-[10px] font-extrabold text-white tracking-wide uppercase">SOLUSI LANGSUNG</Text>
         </View>
         <Text className="text-[15px] font-black text-white leading-tight">Pekerjaan Mendesak?</Text>
-        <Text className="text-[11px] text-orange-100 mt-0.5" numberOfLines={1}>Posting kebutuhanmu & dapatkan tawaran...</Text>
+        <Text className="text-[11px] text-orange-100 mt-0.5 leading-snug">Posting kebutuhanmu & dapatkan tawaran langsung</Text>
       </View>
       <TouchableOpacity
         onPress={() => {

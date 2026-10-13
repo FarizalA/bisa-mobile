@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import {
@@ -31,7 +31,6 @@ import { getStoredUser } from "../../src/lib/user-storage";
 import { WebView } from "react-native-webview";
 import { generateRadarLeafletHtml } from "../../src/utils/radarLeafletHtml";
 import { RadarFilterModals } from "../../src/components/radar/RadarFilterModals";
-import BottomNav from "../../src/components/BottomNav";
 
 // MapView hanya di native — web pakai Leaflet iframe 1:1 dengan web ProvidersMap
 // Di-wrap try/catch agar HP tanpa Google Play Services TIDAK force close, fallback ke WebView Leaflet
@@ -84,6 +83,15 @@ export default function RadarPage() {
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Optimasi RAM 4GB: WebView Leaflet hanya hidup saat tab Radar aktif, langsung dibuang saat pindah tab
+  const [isRadarFocused, setIsRadarFocused] = useState(true);
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsRadarFocused(true);
+      return () => setIsRadarFocused(false);
+    }, [])
+  );
+
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterKategori, setFilterKategori] = useState("Semua Jasa");
@@ -132,10 +140,23 @@ export default function RadarPage() {
           if (stored?.id) await supabase.from("users_bisa").update({ latitude: nc.lat, longitude: nc.lng }).eq("id", stored.id);
         } else if (!stored?.latitude) setLocation({ lat: -6.2088, lng: 106.8456 });
       } catch {
-        if (!stored?.latitude) setLocation({ lat: -6.2088, lng: 106.8456 });
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (data && data.type === "OPEN_PROFILE" && data.id) {
+          router.push(`/profil/${data.id}` as any);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [router]);
 
   useEffect(() => {
     const fetchRadar = async () => {
@@ -192,7 +213,10 @@ export default function RadarPage() {
       const el: any = (globalThis as any).document?.getElementById("radar-iframe") as any;
       el?.contentWindow?.postMessage({ type: "RECENTER" }, "*");
     } else if (webviewRef.current && !MapView) {
-      try { webviewRef.current.postMessage(JSON.stringify({ type: "RECENTER" })); } catch {}
+      try {
+        // RN WebView -> Leaflet: injectJavaScript paling handal (postMessage tidak tembus ke window.addEventListener di Android)
+        webviewRef.current.injectJavaScript(`(function(){try{if(window.recenterMap){window.recenterMap();} else {var d={type:'RECENTER'};try{window.postMessage(JSON.stringify(d),'*');}catch(e){}try{window.dispatchEvent(new MessageEvent('message',{data:d}));}catch(e){}}}catch(e){}})();true;`);
+      } catch {}
     } else if (location && mapRef.current?.animateToRegion) {
       try {
         const delta = radius >= 100 ? 0.8 : radius >= 25 ? 0.4 : radius >= 10 ? 0.2 : radius >= 5 ? 0.1 : 0.05;
@@ -251,10 +275,14 @@ export default function RadarPage() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-1 relative">
-        {location ? (
-          Platform.OS === "web" ? (
+    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+      <View className="flex-1 relative" style={{ flex: 1 }}>
+        {/* Peta di layer bawah (zIndex 1) — biar filter & Lokasi Saya di atasnya tetap bisa diklik di HP */}
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, elevation: 1 }}>
+          {location ? (
+          !isRadarFocused ? (
+            <View className="flex-1 items-center justify-center bg-gray-100"><ActivityIndicator color="#ff6b00" /><Text className="text-xs font-bold text-gray-400 mt-2">Memuat peta...</Text></View>
+          ) : Platform.OS === "web" ? (
             <iframe id="radar-iframe" srcDoc={leafletHTML} style={{ width: "100%", height: "100%", border: "none" }} title="Radar Map" />
           ) : MapView ? (
             <MapErrorBoundary fallback={fallbackWebView}>
@@ -316,9 +344,10 @@ export default function RadarPage() {
         ) : (
           <View className="flex-1 items-center justify-center bg-gray-100"><ActivityIndicator color="#ff6b00" size="large" /><Text className="text-xs font-bold text-gray-500 mt-2">Menunggu lokasi...</Text></View>
         )}
+        </View>
 
-        <View className="absolute top-0 left-0 right-0 z-20 p-4 max-w-md mx-auto w-full pointer-events-none" style={{ width: "100%" }}>
-          <View className="flex-col gap-2.5 pointer-events-auto">
+        <View pointerEvents="box-none" className="absolute top-0 left-0 right-0 p-4 max-w-md mx-auto w-full" style={{ width: "100%", zIndex: 40, elevation: 10 }}>
+          <View pointerEvents="auto" className="flex-col gap-2.5">
             <View className="flex-row items-center bg-white/95 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-gray-100 px-3.5 h-12">
               <Search size={20} color="#9ca3af" />
               <TextInput value={searchQuery} onChangeText={setSearchQuery} placeholder="Cari tukang, ac, cuci, atau nama mitra..." placeholderTextColor="#9ca3af" className="flex-1 text-xs font-semibold text-gray-900 ml-2 h-full" />
@@ -334,7 +363,7 @@ export default function RadarPage() {
                   <TouchableOpacity onPress={() => setActiveDropdown(activeDropdown === "rating" ? null : "rating")} className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm ${filterRating > 0 || onlyTrusted ? "bg-[#ff6b00] border-[#ff6b00]" : "bg-white/95 border-gray-200"}`}><Star size={12} color={filterRating > 0 || onlyTrusted ? "#fff" : "#f59e0b"} fill={filterRating > 0 || onlyTrusted ? "#fff" : "#f59e0b"} /><Text className={`text-[11px] font-bold ${filterRating > 0 || onlyTrusted ? "text-white" : "text-gray-700"}`}>{onlyTrusted ? "Unggulan" : filterRating > 0 ? `Rating ${filterRating}+` : "Rating"}</Text><ChevronDown size={13} color={filterRating > 0 || onlyTrusted ? "#fff" : "#374151"} /></TouchableOpacity>
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                <ScrollView pointerEvents="auto" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
                   <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                     {isFilterActive ? (<TouchableOpacity onPress={handleResetFilter} className="flex-row items-center gap-1 bg-red-500 px-3 py-1.5 rounded-full shadow-sm"><RotateCcw size={14} color="#fff" /><Text className="text-[11px] font-bold text-white">Reset</Text></TouchableOpacity>) : null}
                     <TouchableOpacity onPress={() => setActiveDropdown(activeDropdown === "kategori" ? null : "kategori")} className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm ${filterKategori !== "Semua Jasa" ? "bg-[#ff6b00] border-[#ff6b00]" : "bg-white/95 border-gray-200"}`}><Text className={`text-[11px] font-bold ${filterKategori !== "Semua Jasa" ? "text-white" : "text-gray-700"}`}>{filterKategori}</Text><ChevronDown size={13} color={filterKategori !== "Semua Jasa" ? "#fff" : "#374151"} /></TouchableOpacity>
@@ -348,18 +377,21 @@ export default function RadarPage() {
           </View>
         </View>
 
-        <TouchableOpacity onPress={handleRecenter} activeOpacity={0.88} className="absolute z-10 flex-row items-center gap-2 bg-white/95 px-3.5 py-2.5 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-100" style={{ bottom: 84, right: 16 }}>
-          <Crosshair size={20} color="#2563eb" /><Text className="text-xs font-bold text-gray-800">Lokasi Saya</Text>
-        </TouchableOpacity>
-
         {!loading && providers.length === 0 ? (
-          <View className="absolute inset-0 z-10 bg-white/70 items-center justify-center p-6">
+          <View pointerEvents="auto" className="absolute inset-0 bg-white/70 items-center justify-center p-6" style={{ zIndex: 15, elevation: 5 }}>
             <View className="w-16 h-16 rounded-full bg-gray-100 items-center justify-center mb-3"><MapPin size={30} color="#9ca3af" /></View>
             <Text className="text-base font-extrabold text-gray-900">Mitra Tidak Ditemukan</Text>
             <Text className="text-xs text-gray-500 text-center mt-1 max-w-[240px]">Coba perluas radius atau ubah filter pencarian.</Text>
             <TouchableOpacity onPress={handleResetFilter} className="mt-5 px-5 py-2.5 bg-[#ff6b00] rounded-2xl shadow-md"><Text className="text-xs font-bold text-white">Reset Filter</Text></TouchableOpacity>
           </View>
         ) : null}
+
+        {/* Lokasi Saya harus di layer paling atas (zIndex tertinggi) dan di-render SETELAH overlay kosong biar tidak ketutup */}
+        <View pointerEvents="box-none" style={{ position: "absolute", bottom: 84, right: 16, zIndex: 50, elevation: 12 }}>
+          <TouchableOpacity onPress={handleRecenter} activeOpacity={0.88} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} className="flex-row items-center gap-2 bg-white px-3.5 py-2.5 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-100">
+            <Crosshair size={20} color="#2563eb" /><Text className="text-xs font-bold text-gray-800">Lokasi Saya</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <RadarFilterModals
@@ -379,8 +411,6 @@ export default function RadarPage() {
         onlyTrusted={onlyTrusted}
         setOnlyTrusted={setOnlyTrusted}
       />
-
-      <BottomNav active="radar" />
     </SafeAreaView>
   );
 }

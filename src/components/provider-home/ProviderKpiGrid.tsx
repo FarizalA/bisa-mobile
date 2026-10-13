@@ -48,23 +48,25 @@ export default function ProviderKpiGrid({
         </View>
       </View>
 
-      {/* Box 3: Pendapatan & Tarik Dana */}
+      {/* Box 3: Saldo Dompet & Tarik Dana (1:1 Dompet BISA) */}
       <View className="flex-1 bg-emerald-50 rounded-xl p-3 flex-col justify-between shadow-xs border border-emerald-100">
         <View className="w-7 h-7 rounded-full bg-emerald-200 items-center justify-center mb-1">
           <Wallet size={15} color="#047857" />
         </View>
         <View>
           <Text
-            className="text-[15px] font-black text-gray-900 leading-tight"
+            className="text-[13px] font-bold text-gray-900 leading-tight"
             numberOfLines={1}
+            adjustsFontSizeToFit
           >
-            Rp
-            {stats.pendapatan > 1000
-              ? (stats.pendapatan / 1000).toFixed(0) + "k"
-              : stats.pendapatan}
+            {stats.pendapatan >= 1000000
+              ? `Rp ${(stats.pendapatan / 1000000).toFixed(stats.pendapatan % 1000000 === 0 ? 0 : 1)} jt`
+              : stats.pendapatan >= 1000
+              ? `Rp ${(stats.pendapatan / 1000).toLocaleString("id-ID")} rb`
+              : `Rp ${stats.pendapatan.toLocaleString("id-ID")}`}
           </Text>
-          <TouchableOpacity onPress={onTarikDana} className="mt-0.5">
-            <Text className="text-[11px] text-emerald-600 font-bold underline">
+          <TouchableOpacity onPress={onTarikDana} className="mt-0.5" activeOpacity={0.7}>
+            <Text className="text-[11px] text-emerald-700 font-bold underline">
               Tarik Dana
             </Text>
           </TouchableOpacity>

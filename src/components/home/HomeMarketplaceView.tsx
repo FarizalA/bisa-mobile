@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -78,6 +78,17 @@ export default function HomeMarketplaceView({
   const [maxPrice, setMaxPrice] = useState("");
   const [marketRating, setMarketRating] = useState<number>(0);
 
+  // Debounce search agar tidak trigger Supabase RPC tiap ketikan (penyebab lag 8-10 detik)
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (localSearch === searchQuery) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchQuery(localSearch), 420);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [localSearch]);
+  useEffect(() => { setLocalSearch(searchQuery); }, [searchQuery]);
+
   const marketplaceProviders = React.useMemo(() => {
     let list = [...filteredProviders];
     if (marketRadius !== 100) list = list.filter((p) => (p.distance_km ?? p.distance ?? 999) <= marketRadius);
@@ -146,13 +157,13 @@ export default function HomeMarketplaceView({
               className="flex-1 text-sm font-medium text-gray-900 h-full"
               placeholder="Cari jasa atau keahlian..."
               placeholderTextColor="#9ca3af"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
+              value={localSearch}
+              onChangeText={setLocalSearch}
               autoFocus
               returnKeyType="search"
             />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery("")} className="w-6 h-6 rounded-full bg-gray-300 items-center justify-center">
+            {localSearch ? (
+              <TouchableOpacity onPress={() => { setLocalSearch(""); setSearchQuery(""); }} className="w-6 h-6 rounded-full bg-gray-300 items-center justify-center">
                 <X size={12} color="#4b5563" />
               </TouchableOpacity>
             ) : null}
@@ -457,9 +468,14 @@ export default function HomeMarketplaceView({
                         {prov.is_available !== false ? (
                           <TouchableOpacity
                             onPress={(e: any) => {
-                              e?.stopPropagation?.();
+                              if (e && e.stopPropagation) {
+                                e.stopPropagation();
+                              }
+                              if (e && e.preventDefault) {
+                                e.preventDefault();
+                              }
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                              handleStartChat(prov.id);
+                              if (prov.id) handleStartChat(prov.id);
                             }}
                             activeOpacity={0.75}
                             className="w-9 h-9 rounded-full bg-orange-600 items-center justify-center active:scale-95"

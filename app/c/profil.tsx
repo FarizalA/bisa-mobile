@@ -45,7 +45,6 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useProfilMobileLogic } from "../../src/hooks/useProfilMobileLogic";
-import BottomNav from "../../src/components/BottomNav";
 
 export default function ClientProfilPage() {
   const router = useRouter();
@@ -122,7 +121,7 @@ export default function ClientProfilPage() {
         showsVerticalScrollIndicator={false}
       >
         {/* 2. Client Card with Orange Gradient Banner */}
-        <View className="bg-white rounded-[28px] border border-gray-100 shadow-sm overflow-hidden mb-5">
+        <View className="bg-white rounded-[28px] border border-gray-100 overflow-hidden mb-5">
           <View className="h-24 bg-[#FF6B00] relative">
             <TouchableOpacity
               onPress={() => router.push("/profil/edit" as any)}
@@ -135,7 +134,7 @@ export default function ClientProfilPage() {
 
           <View className="px-5 -mt-10 pb-5 items-center text-center">
             <View className="relative mb-3">
-              <View className="w-20 h-20 rounded-2xl bg-white p-1 shadow-md">
+              <View className="w-20 h-20 rounded-2xl bg-white p-1">
                 <View className="w-full h-full rounded-xl overflow-hidden bg-orange-50 items-center justify-center border border-gray-100">
                   {user.face_url ? (
                     <Image source={{ uri: user.face_url }} style={{ width: 72, height: 72 }} resizeMode="cover" />
@@ -151,7 +150,7 @@ export default function ClientProfilPage() {
               <TouchableOpacity
                 onPress={() => router.push("/profil/edit" as any)}
                 activeOpacity={0.85}
-                className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full shadow-md items-center justify-center border border-gray-100"
+                className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full items-center justify-center border border-gray-100"
               >
                 <Camera size={16} color="#FF6B00" />
               </TouchableOpacity>
@@ -218,7 +217,7 @@ export default function ClientProfilPage() {
             router.replace("/p/home" as any);
           }}
           activeOpacity={0.9}
-          className="mb-6 w-full rounded-2xl p-4 bg-[#FF6B00] flex-row items-center justify-between shadow-md"
+          className="mb-6 w-full rounded-2xl p-4 bg-[#FF6B00] flex-row items-center justify-between"
         >
           <View>
             <View className="flex-row items-center gap-1 mb-0.5">
@@ -235,7 +234,7 @@ export default function ClientProfilPage() {
         {/* 4. Menu: Aktivitas Klien */}
         <View className="mb-4">
           <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Aktivitas Klien</Text>
-          <View className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
+          <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
             <TouchableOpacity
               onPress={() => router.push("/c/aktivitas" as any)}
               className="flex-row items-center gap-3.5 px-4 py-3.5"
@@ -283,7 +282,7 @@ export default function ClientProfilPage() {
         {/* 5. Menu: Pengaturan Akun */}
         <View className="mb-4">
           <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Pengaturan Akun</Text>
-          <View className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
+          <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
             <TouchableOpacity
               onPress={openLocationModal}
               className="flex-row items-center gap-3.5 px-4 py-3.5"
@@ -354,7 +353,7 @@ export default function ClientProfilPage() {
         {/* 6. Menu: Bantuan & Lainnya */}
         <View className="mb-4">
           <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Bantuan & Lainnya</Text>
-          <View className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
+          <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
             <TouchableOpacity
               onPress={() => router.push("/c/bantuan" as any)}
               className="flex-row items-center gap-3.5 px-4 py-3.5"
@@ -388,7 +387,7 @@ export default function ClientProfilPage() {
         {/* 7. Logout Button */}
         <TouchableOpacity
           onPress={() => setShowLogoutModal(true)}
-          className="w-full bg-white border border-red-100 rounded-2xl py-3.5 flex-row items-center justify-center gap-2 mb-4 shadow-sm"
+          className="w-full bg-white border border-red-100 rounded-2xl py-3.5 flex-row items-center justify-center gap-2 mb-4"
         >
           <LogOut size={18} color="#EF4444" />
           <Text className="font-bold text-[13px] text-red-500">Keluar dari Akun</Text>
@@ -510,7 +509,7 @@ export default function ClientProfilPage() {
               <TouchableOpacity
                 onPress={handleSaveLocation}
                 disabled={savingLocation}
-                className="flex-[2] py-3 bg-[#FF6B00] rounded-xl items-center flex-row justify-center gap-1.5 shadow-md"
+                className="flex-[2] py-3 bg-[#FF6B00] rounded-xl items-center flex-row justify-center gap-1.5"
               >
                 {savingLocation ? (
                   <ActivityIndicator color="#fff" size="small" />
@@ -540,7 +539,7 @@ export default function ClientProfilPage() {
             <View className="py-4 gap-3">
               <View className="flex-row items-center justify-between p-3.5 bg-gray-50 rounded-2xl">
                 <View className="flex-row items-center gap-3 flex-1 mr-3">
-                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center shadow-sm">
+                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center">
                     <MessageSquare size={16} color="#6B7280" />
                   </View>
                   <View className="flex-1">
@@ -558,7 +557,7 @@ export default function ClientProfilPage() {
 
               <View className="flex-row items-center justify-between p-3.5 bg-gray-50 rounded-2xl">
                 <View className="flex-row items-center gap-3 flex-1 mr-3">
-                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center shadow-sm">
+                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center">
                     <Package size={16} color="#6B7280" />
                   </View>
                   <View className="flex-1">
@@ -576,7 +575,7 @@ export default function ClientProfilPage() {
 
               <View className="flex-row items-center justify-between p-3.5 bg-gray-50 rounded-2xl">
                 <View className="flex-row items-center gap-3 flex-1 mr-3">
-                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center shadow-sm">
+                  <View className="w-9 h-9 rounded-xl bg-white border border-gray-100 items-center justify-center">
                     <Tag size={16} color="#6B7280" />
                   </View>
                   <View className="flex-1">
@@ -595,7 +594,7 @@ export default function ClientProfilPage() {
 
             <TouchableOpacity
               onPress={() => setShowNotifSettings(false)}
-              className="w-full py-3.5 bg-[#FF6B00] rounded-full items-center mt-2 shadow-sm"
+              className="w-full py-3.5 bg-[#FF6B00] rounded-full items-center mt-2"
               activeOpacity={0.9}
             >
               <Text className="text-white font-extrabold text-sm">Simpan Pengaturan</Text>
@@ -603,8 +602,6 @@ export default function ClientProfilPage() {
           </View>
         </View>
       </Modal>
-
-      <BottomNav active="profil" />
     </SafeAreaView>
   );
 }

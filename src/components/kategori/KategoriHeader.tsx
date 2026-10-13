@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Search, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { RadarIcon } from "./KategoriConstants";
+import { safeBack } from "@/lib/navigation";
 
 export default function KategoriHeader({
   displayTitle,
@@ -20,14 +21,11 @@ export default function KategoriHeader({
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-3 flex-1 min-w-0 pr-2">
           <TouchableOpacity
-            onPress={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/c/home" as any);
-            }}
+            onPress={() => safeBack(router, "/c/home")}
             activeOpacity={0.8}
-            className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-full bg-slate-100 items-center justify-center shrink-0"
           >
-            <ArrowLeft size={20} color="#1e293b" />
+            <ArrowLeft size={22} color="#1e293b" />
           </TouchableOpacity>
           <View className="flex-1 min-w-0">
             <View className="flex-row items-center gap-1.5">

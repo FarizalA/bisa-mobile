@@ -22,12 +22,12 @@ import {
 import * as Haptics from "expo-haptics";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser, setStoredUser } from "../../src/lib/user-storage";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import NotificationSheet from "../../src/components/home/NotificationSheet";
 import ProviderStatusCard from "../../src/components/provider-home/ProviderStatusCard";
 import ProviderKpiGrid from "../../src/components/provider-home/ProviderKpiGrid";
 import ProviderActiveJobs from "../../src/components/provider-home/ProviderActiveJobs";
 import ProviderNearbyJobs from "../../src/components/provider-home/ProviderNearbyJobs";
+import ProviderHomeJobDetailModal from "../../src/components/provider-home/ProviderHomeJobDetailModal";
 
 export default function PartnerHomePage() {
   const router = useRouter();
@@ -54,6 +54,9 @@ export default function PartnerHomePage() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Detail job popup di Home (biar Ambil Job langsung muncul di sini, tidak pindah ke Cari Job)
+  const [selectedJobHome, setSelectedJobHome] = useState<any | null>(null);
 
   // 1. Load Session & User Profile
   useEffect(() => {
@@ -110,17 +113,10 @@ export default function PartnerHomePage() {
         .eq("mitra_id", userId)
         .eq("status", "selesai");
 
-      let pendapatan = 0;
-      if (completedJobs) {
-        completedJobs.forEach((job: any) => {
-          if (job.payment_method === "COD") return;
-          const amount =
-            Number(job.mitra_earnings) ||
-            parseInt(String(job.budget || "").replace(/[^0-9]/g, ""), 10) ||
-            0;
-          pendapatan += amount;
-        });
-      }
+      // Saldo 1:1 Dompet = users_bisa.saldo (real, sudah dipotong penarikan) — SAMA PERSIS dengan Dompet (useDompetUnifiedLogic dbSaldo).
+      // Jangan pakai sum historis completedJobs sebagai saldo (itu total kotor, bikin beda vs Dompet/database).
+      const saldoReal = Number((userData as any)?.saldo ?? (userData as any)?.balance ?? 0);
+      const pendapatan = saldoReal;
 
       // C. Ambil Job Aktif mitra (sedang berjalan)
       const { data: aJobs } = await supabase
@@ -433,7 +429,15 @@ export default function PartnerHomePage() {
               refreshing={refreshing}
               jobs={displayJobs}
               onViewAll={() => router.push("/p/cari-kerja" as any)}
-              onJobDetail={(id) => router.push(`/p/cari-kerja?jobId=${id}` as any)}
+              onJobDetail={(id) => {
+                const found = jobs.find((j: any) => String(j.id) === String(id));
+                if (found) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedJobHome(found);
+                } else {
+                  router.push(`/p/cari-kerja?jobId=${id}` as any);
+                }
+              }}
             />
 
             {/* Banner Maskot */}
@@ -484,7 +488,12 @@ export default function PartnerHomePage() {
         }}
       />
 
-      <ProviderBottomNav active="home" />
+      {/* Job Detail di Home — klik Ambil Job langsung popup di sini */}
+      <ProviderHomeJobDetailModal
+        job={selectedJobHome}
+        onClose={() => setSelectedJobHome(null)}
+        onApplied={() => fetchProviderData()}
+      />
     </SafeAreaView>
   );
 }

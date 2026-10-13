@@ -4,7 +4,7 @@ import { SupabaseProvider } from "../src/contexts/SupabaseContext";
 import { PopupProvider } from "../src/components/PopupProvider.native";
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, View, StatusBar, Platform } from "react-native";
 import "../global.css";
 
 export default function RootLayout() {
@@ -38,6 +38,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
       <SupabaseProvider>
         <PopupProvider>
           <Stack screenOptions={{ headerShown: false, animation: "none" }} />

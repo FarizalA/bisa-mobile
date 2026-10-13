@@ -63,8 +63,8 @@ export function getRank(points: number) {
 
 export function useProfilPublicLogic(targetId: string) {
   const router = useRouter();
-  let showPopup: any = () => {};
-  try { showPopup = usePopup().showPopup; } catch {}
+  const popupContext = usePopup();
+  const showPopup = popupContext?.showPopup || (() => {});
 
   const [userProfile, setUserProfile] = useState<any>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -245,7 +245,7 @@ export function useProfilPublicLogic(targetId: string) {
 
   const handleShare = async () => {
     try {
-      const url = `https://bisa-app.vercel.app/p/profil/${userProfile?.id || targetId}`;
+      const url = `https://bisa-admin.vercel.app/p/profil/${userProfile?.id || targetId}`;
       await Share.share({ title: userProfile?.name || "Mitra BISA", message: `Lihat profil di BISA: ${url}`, url });
     } catch {}
   };
@@ -323,7 +323,7 @@ export function useProfilPublicLogic(targetId: string) {
         const msg = dNum >= 3000 ? `Donasi Rp ${dNum.toLocaleString("id-ID")} tercatat. QR donasi akan muncul di chat.` : "Bayar tunai ke Mitra setelah hasil dikirim & Anda klik Terima.";
         try { showPopup({ type: "success", title: "Pesanan COD Dibuat!", message: `Kartu pesanan COD muncul di chat. ${msg}` }); } catch {}
       } else {
-        try { showPopup({ type: "success", title: "Pesanan Dibuat!", message: "Pesanan Rekber dibuat. Selesaikan pembayaran untuk memulai pengerjaan." }); } catch {}
+        try { showPopup({ type: "success", title: "Pesanan Dibuat!", message: "Pesanan dibuat. Selesaikan pembayaran untuk memulai pengerjaan." }); } catch {}
       }
       router.push(`/c/direct-chat/${cid}` as any);
     } catch (e: any) {

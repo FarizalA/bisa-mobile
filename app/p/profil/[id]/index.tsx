@@ -14,7 +14,7 @@ import {
   TextInput,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -65,6 +65,7 @@ export default function MitraPublicProfilePage() {
   const { id } = useLocalSearchParams();
   const [showQrisDonasi, setShowQrisDonasi] = useState(false);
   const { width: screenW } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const logic = useProfilPublicLogic(String(id));
   const {
     userProfile,
@@ -446,7 +447,10 @@ export default function MitraPublicProfilePage() {
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-100 px-4 py-3 shadow-lg z-40">
+      <View
+        className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-100 px-4 pt-3 shadow-lg z-40"
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+      >
         <View className="flex-row items-center justify-between gap-3">
           <View className="flex-1">
             <Text className="text-[11px] text-gray-400 font-medium">Total Estimasi</Text>
@@ -540,8 +544,8 @@ export default function MitraPublicProfilePage() {
                 </View>
               )}
             </ScrollView>
-            <View className="pt-3 border-t border-gray-100 flex-row items-center justify-between gap-3">
-              <View className="flex-1"><Text className="text-[10px] text-gray-400 font-medium">Total Tagihan</Text><Text className="text-base font-black text-gray-900">Rp{((Number(selectedService?.price) || 0) + (paymentMethod === "COD" && donationAmount ? Number(donationAmount.replace(/\D/g, "")) || 0 : 0)).toLocaleString("id-ID")}</Text></View>
+            <View className="pt-3 border-t border-gray-100 flex-row items-center justify-between gap-3 bg-white" style={{ paddingBottom: Math.max(insets.bottom, 8) }}>
+              <View className="flex-1"><Text className="text-[10px] text-gray-400 font-medium">Total Tagihan</Text><Text className="text-base font-black text-gray-900">Rp{Number(selectedService?.price || 0).toLocaleString("id-ID")}</Text>{paymentMethod === "COD" && donationAmount && Number(donationAmount.replace(/\D/g, "")) >= 3000 ? <Text className="text-[10px] text-amber-700 font-bold mt-0.5">+ Donasi Rp{Number(donationAmount.replace(/\D/g, "")).toLocaleString("id-ID")} via QR terpisah</Text> : null}</View>
               <TouchableOpacity onPress={handleCheckoutOrder} disabled={isOrdering} className="flex-[2] py-3 bg-[#FF6B00] rounded-full items-center shadow-md">{isOrdering ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-white font-extrabold text-xs">Lanjutkan Pesanan</Text>}</TouchableOpacity>
             </View>
           </View>

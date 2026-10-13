@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, Image, Linking } from "react-native";
-import { Package, FileText, CheckCircle2, MapPin, DollarSign, Star } from "lucide-react-native";
+import { Package, FileText, CheckCircle2, MapPin, DollarSign, Star, Camera } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { parseOrderContent, formatBudget } from "../../lib/chatHelpers";
 
@@ -211,10 +211,11 @@ export function OrderCardBubbleRN({
   const liveStatus = jobStatusMap[String(parsed.jobId)] || parsed.status;
 
   const isPendingMitra = liveStatus === "menunggu_konfirmasi_mitra";
-  const isCOD = (paymentMethod || "").toUpperCase() === "COD" || isPendingMitra;
+  const isCOD = (paymentMethod || "").toUpperCase() === "COD";
   const isWaitingPay = liveStatus === "menunggu_pembayaran";
   const isWorking = ["mitra_ditemukan", "sedang_dikerjakan", "dikerjakan"].includes(liveStatus);
   const isReview = liveStatus === "menunggu_konfirmasi_selesai";
+  const isPendingCancel = liveStatus === "menunggu_persetujuan_batal";
   const isDone = liveStatus === "selesai";
   const isCancelled = liveStatus === "dibatalkan" || liveStatus === "ditolak" || liveStatus === "expired";
 
@@ -228,6 +229,10 @@ export function OrderCardBubbleRN({
     badgeText = "#92400E";
   } else if (isWaitingPay) {
     statusLabel = "Menunggu Pembayaran";
+    badgeBg = "#FEF3C7";
+    badgeText = "#92400E";
+  } else if (isPendingCancel) {
+    statusLabel = "Pengajuan Batal";
     badgeBg = "#FEF3C7";
     badgeText = "#92400E";
   } else if (isCancelled) {
@@ -268,7 +273,7 @@ export function OrderCardBubbleRN({
                 isMitraView ? "text-emerald-700" : isCOD ? "text-amber-800" : "text-[#FF6B00]"
               }`}
             >
-              {isCOD ? "PESANAN COD" : "PESANAN ESCROW"}
+              {isCOD ? "PESANAN COD" : "PESANAN ONLINE"}
             </Text>
           </View>
           <View
@@ -327,13 +332,13 @@ export function OrderCardBubbleRN({
                 {isMitraView ? (
                   <View className="flex-row gap-2">
                     <TouchableOpacity
-                      onPress={() => onAction?.(parsed.jobId, "reject")}
+                      onPress={() => onAction?.(parsed.jobId, "mitra_reject")}
                       className="flex-1 py-2.5 rounded-full border border-red-200 items-center active:scale-95"
                     >
                       <Text className="text-[11px] font-bold text-red-600">Tolak</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => onAction?.(parsed.jobId, "accept")}
+                      onPress={() => onAction?.(parsed.jobId, "mitra_accept")}
                       className="flex-1 py-2.5 rounded-full bg-emerald-600 items-center active:scale-95 shadow-xs"
                     >
                       <Text className="text-[11px] font-black text-white">Setujui</Text>
@@ -361,18 +366,28 @@ export function OrderCardBubbleRN({
             {isWaitingPay && !isPendingMitra && (
               <>
                 {!isMitraView ? (
-                  <View className="flex-row gap-2">
+                  <View className="flex-col gap-1.5">
+                    <View className="flex-row gap-2">
+                      <TouchableOpacity
+                        onPress={() => onAction?.(parsed.jobId, "cancel")}
+                        className="px-4 py-2.5 rounded-full border border-gray-200 items-center active:scale-95"
+                      >
+                        <Text className="text-[11px] font-bold text-gray-600">Batal</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => onAction?.(parsed.jobId, "pay")}
+                        className="flex-1 py-2.5 rounded-full bg-[#FF6B00] items-center active:scale-95 shadow-xs"
+                      >
+                        <Text className="text-[11px] font-black text-white">Bayar Sekarang</Text>
+                      </TouchableOpacity>
+                    </View>
                     <TouchableOpacity
-                      onPress={() => onAction?.(parsed.jobId, "cancel")}
-                      className="px-4 py-2.5 rounded-full border border-gray-200 items-center active:scale-95"
+                      onPress={() => onAction?.(parsed.jobId, "check_payment")}
+                      className="py-1 items-center"
                     >
-                      <Text className="text-[11px] font-bold text-gray-600">Batal</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => onAction?.(parsed.jobId, "pay")}
-                      className="flex-1 py-2.5 rounded-full bg-[#FF6B00] items-center active:scale-95 shadow-xs"
-                    >
-                      <Text className="text-[11px] font-black text-white">Bayar Sekarang</Text>
+                      <Text className="text-[10px] font-bold text-emerald-700 underline">
+                        Sudah bayar? Cek Status Pembayaran
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -404,14 +419,49 @@ export function OrderCardBubbleRN({
                     <FileText size={15} color="#fff" />
                     <Text className="text-xs font-black text-white">Kirim Hasil Kerja</Text>
                   </TouchableOpacity>
+                ) : isCOD ? (
+                  <View className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 items-center">
+                    <Text className="text-[11px] font-bold text-amber-800 text-center">
+                      💵 COD Bayar tunai setelah Terima Pesanan.
+                    </Text>
+                  </View>
                 ) : (
                   <View className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 items-center">
                     <Text className="text-[11px] font-bold text-emerald-800 text-center">
-                      🔒 Dana diamankan di Rekber BISA. Mitra sedang mengerjakan pesanan Anda.
+                      🔒 Pembayaran berhasil. Mitra sedang mengerjakan pesanan Anda.
                     </Text>
                   </View>
                 )}
               </>
+            )}
+
+            {/* 3.5. MENUNGGU PERSETUJUAN PEMBATALAN */}
+            {isPendingCancel && (
+              <View className="bg-amber-50 border border-amber-200 rounded-xl p-3 items-center gap-2">
+                <Text className="text-[11px] font-bold text-amber-900 text-center leading-relaxed">
+                  ⚠️ {isMitraView ? "Klien mengajukan pembatalan pesanan ini." : "Menunggu respon persetujuan pembatalan dari Mitra (maks 24 jam)."}
+                </Text>
+                {isMitraView ? (
+                  <View className="flex-row gap-2 w-full mt-1">
+                    <TouchableOpacity
+                      onPress={() => onAction?.(parsed.jobId, "mitra_approve_cancel")}
+                      className="flex-1 py-2.5 rounded-full bg-red-600 items-center justify-center active:scale-95 shadow-xs"
+                    >
+                      <Text className="text-xs font-black text-white">Setujui Batal</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => onAction?.(parsed.jobId, "mitra_reject_cancel")}
+                      className="flex-1 py-2.5 rounded-full bg-white border border-gray-300 items-center justify-center active:scale-95 shadow-xs"
+                    >
+                      <Text className="text-xs font-black text-gray-700">Tolak (&gt;80%)</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text className="text-[10px] text-amber-700 text-center">
+                    Jika Mitra tidak merespons dalam 24 jam, dana akan otomatis kembali ke saldo Dompet Anda.
+                  </Text>
+                )}
+              </View>
             )}
 
             {/* 4. MENUNGGU PERSETUJUAN KLIEN */}
@@ -561,10 +611,10 @@ export function DeliveryBubbleRN({
   const fileUrl = (()=>{ try{ return decodeURIComponent(parts[1] || ""); }catch{ return parts[1]||""; } })();
   const linkUrl = (()=>{ try{ return decodeURIComponent(parts[2] || ""); }catch{ return parts[2]||""; } })();
   const note = (()=>{ try{ return parts[3] ? decodeURIComponent(parts.slice(3).join("|")) : ""; }catch{ return parts.slice(3).join("|"); } })();
-  const isImage = !!fileUrl && /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(fileUrl);
+  const [imgError, setImgError] = useState(false);
+  const isImage = !!fileUrl && (/\.(jpg|jpeg|png|webp|gif|heic)(\?|$)/i.test(fileUrl) || fileUrl.includes("deliveries") || fileUrl.includes("chat_images") || fileUrl.includes("job_attachments"));
   const finished = isFinished || jobStatus === "selesai" || jobStatus === "finished";
-  let router: any = null;
-  try { router = useRouter(); } catch {}
+  const router = useRouter();
 
   return (
     <View className={`flex-row ${isMe ? "justify-end" : "justify-start"} w-full`}>
@@ -581,6 +631,12 @@ export function DeliveryBubbleRN({
         </View>
 
         <View className="p-3.5 gap-3">
+          {!note && !fileUrl && !linkUrl ? (
+            <View className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 items-center">
+              <Text className="text-xs text-gray-500 italic">Pengerjaan selesai dilaporkan oleh Mitra.</Text>
+            </View>
+          ) : null}
+
           {note ? (
             <View className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
               <Text className="text-xs text-gray-700 leading-5">&quot;{note}&quot;</Text>
@@ -590,9 +646,14 @@ export function DeliveryBubbleRN({
           {fileUrl ? (
             <View className="gap-1">
               <Text className="text-[10px] font-bold text-gray-400 tracking-widest">LAMPIRAN FILE / FOTO</Text>
-              {isImage ? (
+              {isImage && !imgError ? (
                 <TouchableOpacity onPress={() => onPreview?.(fileUrl)} activeOpacity={0.88} className="rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
-                  <Image source={{ uri: fileUrl }} style={{ width: "100%", height: 176, borderRadius: 16, opacity: finished ? 0.45 : 1 } as any} resizeMode="cover" />
+                  <Image
+                    source={{ uri: fileUrl }}
+                    style={{ width: "100%", height: 176, borderRadius: 16, opacity: finished ? 0.45 : 1 } as any}
+                    resizeMode="cover"
+                    onError={() => setImgError(true)}
+                  />
                   {finished ? (
                     <View className="absolute inset-0 bg-gray-600/30 items-center justify-center rounded-[16px]">
                        <View className="bg-white/90 px-3 py-1.5 rounded-full border border-gray-200">
@@ -602,8 +663,11 @@ export function DeliveryBubbleRN({
                   ) : null}
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={() => Linking.openURL(fileUrl)} className={`rounded-xl px-3 py-2.5 border ${finished ? "bg-gray-50 border-gray-100" : "bg-emerald-50 border-emerald-100"}`}>
-                  <Text className={`text-xs font-bold underline ${finished ? "text-gray-500" : "text-emerald-700"}`} numberOfLines={1}>Unduh Dokumen Hasil Kerja</Text>
+                <TouchableOpacity onPress={() => Linking.openURL(fileUrl)} className={`rounded-xl px-3 py-2.5 flex-row items-center gap-2 border ${finished ? "bg-gray-50 border-gray-100" : "bg-emerald-50 border-emerald-100"}`}>
+                  <Camera size={14} color={finished ? "#6b7280" : "#047857"} />
+                  <Text className={`text-xs font-bold underline flex-1 ${finished ? "text-gray-500" : "text-emerald-700"}`} numberOfLines={1}>
+                    {isImage ? "Lihat / Buka Foto Bukti" : "Unduh Dokumen Hasil Kerja"}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>

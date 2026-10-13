@@ -12,7 +12,6 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Star, User } from "lucide-react-native";
 import { supabase } from "../../../src/lib/supabase";
 import { getStoredUser } from "../../../src/lib/user-storage";
-import ProviderBottomNav from "../../../src/components/ProviderBottomNav";
 import { safeBack } from "@/lib/navigation";
 
 export default function UlasanProviderPage() {
@@ -177,8 +176,6 @@ export default function UlasanProviderPage() {
           </View>
         </View>
       </ScrollView>
-
-      <ProviderBottomNav active="profil" />
     </SafeAreaView>
   );
 }

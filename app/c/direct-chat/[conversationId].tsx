@@ -3,14 +3,14 @@ import {
   View, Text, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator,
   Modal, KeyboardAvoidingView, Platform, Linking,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
 import {
   ArrowLeft, MoreVertical, Send, Plus, Image as ImageIcon, MapPin, DollarSign,
   Trash2, X, AlertCircle, Link2, Package, FileText,
 } from "lucide-react-native";
 import { useChatLogic } from "../../../src/hooks/useChatLogic";
-import { formatBudget } from "../../../src/lib/chatHelpers";
+import { formatBudget, parseOrderContent } from "../../../src/lib/chatHelpers";
 import {
   TextBubble, ImageBubble, LocationBubble, OfferBubble,
   OrderCardBubbleRN, DeliveryBubbleRN, RevisionCardBubbleRN,
@@ -22,6 +22,7 @@ import {
 
 export default function ClientDirectChatPage() {
   const { conversationId } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const chat: any = useChatLogic(String(conversationId));
   const scrollRef = useRef<ScrollView>(null);
 
@@ -133,7 +134,7 @@ export default function ClientDirectChatPage() {
 
         {/* MESSAGES */}
         <ScrollView ref={scrollRef} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 16, gap: 12 }} className="flex-1" showsVerticalScrollIndicator={false} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}>
-          <View className="self-center bg-black/5 px-3 py-1 rounded-full"><Text className="text-[10px] font-bold text-gray-500">Percakapan diamankan Rekber BISA 🔒</Text></View>
+          <View className="self-center bg-black/5 px-3 py-1 rounded-full"><Text className="text-[10px] font-bold text-gray-500">Percakapan diamankan 🔒</Text></View>
 
           {chat.messages.map((msg: any) => {
             const isMe = String(msg.sender_id) === String(chat.myUserId);
@@ -141,6 +142,12 @@ export default function ClientDirectChatPage() {
             const type = msg.message_type;
 
         if (type === "order" || msg.content.startsWith("[ORDER]:")) {
+          const parsed = parseOrderContent(msg.content);
+          const currentPm =
+            chat.jobPaymentMethodMap?.[String(parsed.jobId)] ||
+            (String(chat.jobInfo?.id) === String(parsed.jobId)
+              ? chat.jobInfo?.payment_method
+              : undefined);
           return (
             <OrderCardBubbleRN
               key={msg.id}
@@ -149,7 +156,7 @@ export default function ClientDirectChatPage() {
               isMe={isMe}
               isMitraView={false}
               jobStatusMap={chat.jobStatusMap}
-              paymentMethod={chat.jobInfo?.payment_method}
+              paymentMethod={currentPm}
               onAction={chat.orderAction}
               onViewDetail={chat.openOrderDetail}
             />
@@ -188,7 +195,10 @@ export default function ClientDirectChatPage() {
         </View>
 
         {/* INPUT BAR */}
-        <View className="px-3 py-2.5 bg-white border-t border-gray-100 flex-row items-end gap-2">
+        <View
+          className="px-3 pt-2.5 bg-white border-t border-gray-100 flex-row items-end gap-2"
+          style={{ paddingBottom: Math.max(insets.bottom, 10) }}
+        >
           <TouchableOpacity onPress={() => chat.setShowAttachments(!chat.showAttachments)} className="w-10 h-10 rounded-full bg-orange-50 items-center justify-center"><Plus size={20} color="#FF6B00" /></TouchableOpacity>
           <View className="flex-1 bg-gray-100 rounded-[22px] px-4 py-2 min-h-[42px] justify-center border border-gray-100">
             <TextInput value={chat.newMessage} onChangeText={chat.setNewMessage} placeholder="Ketik pesan..." placeholderTextColor="#9CA3AF" multiline className="text-[14px] text-gray-900 leading-5 p-0" style={{ maxHeight: 90 } as any} />
@@ -215,9 +225,9 @@ export default function ClientDirectChatPage() {
           <View className="flex-1 bg-black/90 items-center justify-center p-4"><TouchableOpacity onPress={() => chat.setPreviewImage(null)} className="absolute top-10 right-4 z-10 w-9 h-9 rounded-full bg-white/20 items-center justify-center"><X size={20} color="#fff" /></TouchableOpacity><Image source={{ uri: chat.previewImage }} className="w-full h-[70%]" resizeMode="contain" /></View>
         </Modal>
       )}
-      {/* PAY SHEET */}
       <Modal visible={chat.showPaySheet} transparent animationType="slide" onRequestClose={() => chat.setShowPaySheet(false)}>
-        <View className="flex-1 bg-black/60 justify-end"><View className="bg-white rounded-t-[28px] p-6">
+        <View className="flex-1 bg-black/60 justify-end">
+          <View className="bg-white rounded-t-[28px] p-6" style={{ paddingBottom: Math.max(insets.bottom, 24) }}>
           <View className="flex-row justify-between items-center mb-4">
             <View>
               <Text className="font-extrabold text-base text-gray-900">Pilih Pembayaran</Text>
@@ -248,7 +258,7 @@ export default function ClientDirectChatPage() {
               <DollarSign size={18} color="#059669" />
             </View>
             <View className="flex-1">
-              <Text className="font-bold text-gray-900">Online — Rekber BISA</Text>
+              <Text className="font-bold text-gray-900">Online — Transfer / QRIS</Text>
               <Text className="text-xs text-gray-500">QRIS / Transfer / GoPay — dana aman</Text>
             </View>
             {chat.payingOnline ? <ActivityIndicator size="small" color="#059669" /> : null}

@@ -8,9 +8,10 @@ import {
   Modal,
   Alert,
   Platform,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as Linking from "expo-linking";
 import {
   ArrowLeft,
@@ -25,7 +26,6 @@ import {
 } from "lucide-react-native";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser, setStoredUser } from "../../src/lib/user-storage";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import { safeBack } from "@/lib/navigation";
 
 export type PlanItem = {
@@ -100,6 +100,18 @@ const DEFAULT_PLANS: PlanItem[] = [
 
 export default function ProviderLanggananPage() {
   const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.replace("/p/profil" as any);
+        return true;
+      };
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [router])
+  );
+
   const [user, setUser] = useState<any>(null);
   const [plans, setPlans] = useState<PlanItem[]>(DEFAULT_PLANS);
   const [loading, setLoading] = useState(true);
@@ -180,7 +192,7 @@ export default function ProviderLanggananPage() {
       // Expo Web: pakai relative biar CORS lokal aman. Native: pakai EXPO_PUBLIC_API_URL
       const isWeb = Platform.OS === "web";
       const backendUrl = !isWeb
-        ? process.env.EXPO_PUBLIC_API_URL || "https://bisa-app.vercel.app"
+        ? process.env.EXPO_PUBLIC_API_URL || "https://bisa-admin.vercel.app"
         : "";
       const url = backendUrl ? `${backendUrl}/api/langganan/create` : `/api/langganan/create`;
       const res = await fetch(url, {
@@ -247,7 +259,7 @@ export default function ProviderLanggananPage() {
       {/* HEADER 1:1 Web */}
       <View className="bg-white/95 border-b border-gray-100 px-4 h-16 flex-row items-center gap-3">
         <TouchableOpacity
-          onPress={() => safeBack(router, "/p/home")}
+          onPress={() => router.replace("/p/profil" as any)}
           className="w-9 h-9 rounded-xl bg-gray-100 items-center justify-center"
           activeOpacity={0.7}
         >
@@ -464,8 +476,6 @@ export default function ProviderLanggananPage() {
           </View>
         </View>
       </Modal>
-
-      <ProviderBottomNav active="profil" />
     </SafeAreaView>
   );
 }

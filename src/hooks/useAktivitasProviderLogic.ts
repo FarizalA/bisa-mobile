@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
+import { checkAndSyncMidtransStatus } from "../lib/midtransDirect";
 
 export interface ProviderJob {
   id: string | number;
@@ -113,8 +114,7 @@ export function useAktivitasProviderLogic() {
           // Auto-sync status: kalau uang sudah masuk Midtrans tapi still menunggu_pembayaran, ubah ke sedang_dikerjakan
           if (j.status === "menunggu_pembayaran" && ((j as any).payment_token || (j as any).payment_url)) {
             try {
-              const res = await fetch(`/api/payment/sync?jobId=${j.id}`);
-              const syncData = await res.json();
+              const syncData = await checkAndSyncMidtransStatus(Number(j.id), (j as any).payment_token);
               if (syncData.isPaid) {
                 return { ...j, status: "sedang_dikerjakan", payment_status: "escrow_held" } as ProviderJob;
               }

@@ -10,7 +10,7 @@ import {
   TextInput,
   Switch,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -40,7 +40,6 @@ import {
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useProfilMobileLogic } from "../../src/hooks/useProfilMobileLogic";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 
 function Countdown({ until }: { until: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -97,6 +96,9 @@ export default function ProviderProfilPage() {
     handleLogout,
   } = logic;
 
+  // Responsive bottom inset biar tombol tidak ketutup navigation bar (Android 11/16)
+  const insets = useSafeAreaInsets();
+
   if (loading || !user) {
     return (
       <View className="flex-1 bg-[#faf8ff] items-center justify-center">
@@ -131,7 +133,7 @@ export default function ProviderProfilPage() {
     <View className="flex-1 bg-[#faf8ff]" style={!isActive ? ({ filter: "grayscale(1)", opacity: 0.97 } as any) : undefined}>
       <View className="absolute top-0 left-0 right-0 h-40 bg-[#eaedff]" />
 
-      <SafeAreaView className="flex-1" edges={["top"]}>
+      <SafeAreaView className="flex-1" edges={["top"]} style={{ backgroundColor: "transparent" }}>
         <View className="bg-white/90 px-4 h-16 flex-row items-center justify-between border-b border-gray-100/50 shrink-0">
           <View className="flex-row items-center gap-3 flex-1 min-w-0">
             <TouchableOpacity
@@ -158,7 +160,7 @@ export default function ProviderProfilPage() {
           showsVerticalScrollIndicator={false}
         >
           {/* Mitra Profil Card — 1:1 web MitraProfilCard.tsx */}
-          <View className="bg-white rounded-[20px] p-5 shadow-sm border border-gray-100/50 overflow-hidden relative">
+          <View className="bg-white rounded-[20px] p-5 border border-gray-100 overflow-hidden relative">
             {isFeaturedActive ? (
               <LinearGradient
                 colors={["#7C3AED", "#D946EF", "#FBBF24"]}
@@ -186,7 +188,7 @@ export default function ProviderProfilPage() {
                     </View>
                   </LinearGradient>
                 ) : (
-                  <View className="w-16 h-16 rounded-full overflow-hidden bg-[#eaedff] border-2 border-white items-center justify-center shadow-sm">
+                  <View className="w-16 h-16 rounded-full overflow-hidden bg-[#eaedff] border-2 border-white items-center justify-center">
                     {user.face_url ? (
                       <Image source={{ uri: user.face_url }} style={{ width: 64, height: 64 }} resizeMode="cover" />
                     ) : (
@@ -195,28 +197,32 @@ export default function ProviderProfilPage() {
                   </View>
                 )}
                 {isFeaturedActive ? (
-                  <View className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white border border-violet-100 items-center justify-center shadow-sm">
-                    <Text className="text-[10px]">⭐</Text>
-                  </View>
+                  <LinearGradient
+                    colors={["#7C3AED", "#4F46E5"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      position: "absolute",
+                      bottom: -2,
+                      right: -2,
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: 2,
+                      borderColor: "#ffffff",
+                    }}
+                  >
+                    <Text className="text-white text-[11px] font-extrabold" style={{ marginTop: -1 }}>✓</Text>
+                  </LinearGradient>
                 ) : null}
               </View>
 
               <View className="flex-1 min-w-0 pt-0.5">
-                <View className="flex-row items-center gap-1.5 min-w-0">
-                  <Text className="text-[18px] leading-[24px] font-bold text-[#131b2e] flex-1" numberOfLines={1}>
-                    {user.name || "Pengguna BISA"}
-                  </Text>
-                  {isFeaturedActive ? (
-                    <LinearGradient
-                      colors={["#7C3AED", "#4F46E5"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{ width: 18, height: 18, borderRadius: 999, alignItems: "center", justifyContent: "center" }}
-                    >
-                      <Text className="text-white text-[10px] font-bold">✓</Text>
-                    </LinearGradient>
-                  ) : null}
-                </View>
+                <Text className="text-[18px] leading-[24px] font-bold text-[#131b2e]" numberOfLines={1}>
+                  {user.name || "Pengguna BISA"}
+                </Text>
                 <Text className="text-[12px] text-gray-500 mt-0.5" numberOfLines={1}>
                   {user.email}
                 </Text>
@@ -292,7 +298,7 @@ export default function ProviderProfilPage() {
 
           {/* Quick Actions 3-Grid — non-aktif = grayscale & switch off */}
           <View className="flex-row gap-3 mt-4">
-            <View className={`flex-1 rounded-2xl p-3 shadow-sm border ${isActive ? "bg-white border-gray-100/50" : "bg-gray-50 border-gray-200"}`}>
+            <View className={`flex-1 rounded-2xl p-3 border ${isActive ? "bg-white border-gray-100/50" : "bg-gray-50 border-gray-200"}`}>
               <View className="flex-row justify-between items-start mb-2">
                 <View className={`w-7 h-7 rounded-full items-center justify-center ${isActive ? "bg-emerald-50" : "bg-gray-100"}`}>
                   <Store size={14} color={isActive ? "#059669" : "#9CA3AF"} />
@@ -305,7 +311,7 @@ export default function ProviderProfilPage() {
                   className={`w-8 h-4 rounded-full justify-center px-0.5 ${isActive ? "bg-[#10B981]" : "bg-gray-300"}`}
                   activeOpacity={0.8}
                 >
-                  <View className={`w-3 h-3 rounded-full bg-white shadow-sm ${isActive ? "self-end" : "self-start"}`} />
+                  <View className={`w-3 h-3 rounded-full bg-white ${isActive ? "self-end" : "self-start"}`} />
                 </TouchableOpacity>
               </View>
               <Text className={`text-[12px] font-bold ${isActive ? "text-[#131b2e]" : "text-gray-500"}`}>{isActive ? "Aktif" : "Istirahat"}</Text>
@@ -315,7 +321,7 @@ export default function ProviderProfilPage() {
             <TouchableOpacity
               onPress={openLocationModal}
               activeOpacity={0.85}
-              className="flex-1 bg-white rounded-2xl p-3 border border-gray-100/50 shadow-sm"
+              className="flex-1 bg-white rounded-2xl p-3 border border-gray-100/50"
             >
               <View className={`w-7 h-7 rounded-full items-center justify-center mb-2 ${user.latitude ? "bg-teal-50" : "bg-amber-50"}`}>
                 <MapPinned size={14} color={user.latitude ? "#0D9488" : "#F59E0B"} />
@@ -331,7 +337,7 @@ export default function ProviderProfilPage() {
             <TouchableOpacity
               onPress={() => router.push(`/p/profil/${user.id}` as any)}
               activeOpacity={0.85}
-              className="flex-1 bg-white rounded-2xl p-3 border border-gray-100/50 shadow-sm"
+              className="flex-1 bg-white rounded-2xl p-3 border border-gray-100/50"
             >
               <View className="w-7 h-7 rounded-full bg-blue-50 items-center justify-center mb-2">
                 <Eye size={14} color="#2563eb" />
@@ -344,7 +350,7 @@ export default function ProviderProfilPage() {
           {/* Akun Saya */}
           <View className="mt-6">
             <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Akun Saya</Text>
-            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50 shadow-sm">
+            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
               <TouchableOpacity onPress={() => router.push("/profil/edit" as any)} className="flex-row items-center gap-3.5 px-4 py-3.5">
                 <View className="w-10 h-10 rounded-xl bg-emerald-50 items-center justify-center shrink-0">
                   <Edit3 size={18} color="#059669" />
@@ -434,7 +440,7 @@ export default function ProviderProfilPage() {
           {/* Aktivitas */}
           <View className="mt-4">
             <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Aktivitas</Text>
-            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50 shadow-sm">
+            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
               <TouchableOpacity onPress={() => router.push("/p/aktivitas" as any)} className="flex-row items-center gap-3.5 px-4 py-3.5">
                 <View className="w-10 h-10 rounded-xl bg-emerald-50 items-center justify-center shrink-0">
                   <Clock3 size={18} color="#059669" />
@@ -462,7 +468,7 @@ export default function ProviderProfilPage() {
           {/* Bantuan & Lainnya */}
           <View className="mt-4">
             <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Bantuan & Lainnya</Text>
-            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50 shadow-sm">
+            <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
               <TouchableOpacity onPress={() => router.push("/p/bantuan" as any)} className="flex-row items-center gap-3.5 px-4 py-3.5">
                 <View className="w-10 h-10 rounded-xl bg-sky-50 items-center justify-center shrink-0">
                   <HelpCircle size={18} color="#0284C7" />
@@ -489,7 +495,7 @@ export default function ProviderProfilPage() {
 
           <TouchableOpacity
             onPress={() => setShowLogoutModal(true)}
-            className="w-full mt-6 bg-white border border-red-100 rounded-2xl py-3.5 flex-row items-center justify-center gap-2 shadow-sm"
+            className="w-full mt-6 bg-white border border-red-100 rounded-2xl py-3.5 flex-row items-center justify-center gap-2"
           >
             <LogOut size={18} color="#EF4444" />
             <Text className="font-bold text-sm text-red-500">Keluar dari Akun</Text>
@@ -597,14 +603,17 @@ export default function ProviderProfilPage() {
                 />
               </ScrollView>
 
-              <View className="pt-3 border-t border-gray-100 flex-row gap-2.5">
+              <View
+                className="pt-3 border-t border-gray-100 flex-row gap-2.5 bg-white"
+                style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+              >
                 <TouchableOpacity onPress={() => setShowLocationModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl items-center">
                   <Text className="font-bold text-xs text-gray-700">Batal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleSaveLocation}
                   disabled={savingLocation}
-                  className="flex-[2] py-3 bg-emerald-600 rounded-xl items-center flex-row justify-center gap-1.5 shadow-md"
+                  className="flex-[2] py-3 bg-emerald-600 rounded-xl items-center flex-row justify-center gap-1.5"
                 >
                   {savingLocation ? (
                     <ActivityIndicator color="#fff" size="small" />
@@ -699,8 +708,6 @@ export default function ProviderProfilPage() {
             </View>
           </View>
         </Modal>
-
-        <ProviderBottomNav active="profil" />
       </SafeAreaView>
     </View>
   );

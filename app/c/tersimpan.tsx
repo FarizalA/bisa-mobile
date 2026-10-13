@@ -12,7 +12,6 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Bookmark, Star, MapPin, Trash2, User } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTersimpanLogic, FavoriteMitra } from "../../src/hooks/useTersimpanLogic";
-import BottomNav from "../../src/components/BottomNav";
 import { safeBack } from "@/lib/navigation";
 
 export default function TersimpanPage() {
@@ -33,7 +32,7 @@ export default function TersimpanPage() {
       {/* Header */}
       <View className="h-16 px-4 flex-row items-center justify-between bg-white border-b border-gray-100">
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => safeBack(router, "/c/home")} className="w-9 h-9 rounded-full items-center justify-center">
+          <TouchableOpacity onPress={() => router.replace("/c/profil" as any)} className="w-9 h-9 rounded-full items-center justify-center">
             <ArrowLeft size={22} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-bold text-gray-900">Mitra Tersimpan</Text>
@@ -136,8 +135,6 @@ export default function TersimpanPage() {
           )}
         </View>
       </ScrollView>
-
-      <BottomNav active="profil" />
     </SafeAreaView>
   );
 }

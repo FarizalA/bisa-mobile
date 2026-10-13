@@ -19,7 +19,7 @@ function getOfferExpiryMs(job: ProviderJob): number | null {
 
 function OfferCountdown({ job }: { job: ProviderJob }) {
   const expiry = getOfferExpiryMs(job);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!expiry) return;
     const left = expiry - Date.now();
@@ -199,7 +199,7 @@ export default function ProviderAktivitasJobList({ jobs, filteredJobs, loading, 
                     </View>
                     {isOffered && <OfferCountdown job={job} />}
                   </View>
-                  <Text className="text-[11px] font-bold text-gray-400">{new Date(job.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</Text>
+                  <Text className="text-[11px] font-bold text-gray-400">{new Date(job.created_at).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</Text>
                 </View>
                 <Text className="font-bold text-gray-900 text-[15px] leading-snug" numberOfLines={2}>
                   {job.judul}

@@ -1,7 +1,6 @@
 import React from "react";
 import { View, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import { useCariKerjaLogic } from "../../src/hooks/useCariKerjaLogic";
 import CariKerjaHeader from "../../src/components/cari-kerja/CariKerjaHeader";
 import CariKerjaSearchBar from "../../src/components/cari-kerja/CariKerjaSearchBar";
@@ -20,23 +19,12 @@ export default function CariKerjaPage() {
       <CariKerjaHeader logic={logic} />
 
       {viewMode === "list" ? (
-        <ScrollView
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={fetchNearbyJobs}
-              colors={["#059669"]}
-            />
-          }
-        >
-          <View className="max-w-[440px] w-full self-center">
-            <CariKerjaSearchBar logic={logic} />
-            <CariKerjaFilters logic={logic} />
-            <CariKerjaList logic={logic} />
-          </View>
-        </ScrollView>
+        // FlatList untuk cari-kerja: virtualized, hanya render 6 job awal (hemat RAM), scroll baru load
+        <View className="flex-1 max-w-[440px] w-full self-center">
+          <CariKerjaSearchBar logic={logic} />
+          <CariKerjaFilters logic={logic} />
+          <CariKerjaList logic={logic} />
+        </View>
       ) : (
         <View className="flex-1" style={{ flex: 1 }}>
           <CariKerjaMap logic={logic} />
@@ -46,9 +34,6 @@ export default function CariKerjaPage() {
       {/* Modal & Toast */}
       <CariKerjaDetailModal logic={logic} />
       <CariKerjaModals logic={logic} />
-
-      {/* Provider Bottom Navigation (sembunyikan saat modal terbuka) */}
-      {!selectedJob && <ProviderBottomNav active="cari" />}
     </SafeAreaView>
   );
 }

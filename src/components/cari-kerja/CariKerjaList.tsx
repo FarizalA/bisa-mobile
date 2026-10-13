@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator, FlatList } from "react-native";
 import { Search, Clock } from "lucide-react-native";
 import { type CariKerjaLogic } from "../../hooks/useCariKerjaLogic";
 
@@ -37,15 +37,21 @@ export default function CariKerjaList({ logic }: { logic: CariKerjaLogic }) {
           </Text>
         </View>
       ) : (
-        <View className="flex-col gap-3 pb-8">
-          {sortedJobs.map((job) => {
+        <FlatList
+          data={sortedJobs}
+          keyExtractor={(job) => `job-${job.id}`}
+          contentContainerStyle={{ gap: 12, paddingBottom: 32 }}
+          initialNumToRender={6}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews={true}
+          renderItem={({ item: job }) => {
             const isMatch = user?.keahlian && user.keahlian.includes(job.kategori);
             const { textDesc } = parseDeskripsi(job.deskripsi);
             const countdown = getCountdown(job.deskripsi);
 
             return (
               <TouchableOpacity
-                key={job.id}
                 onPress={() => setSelectedJob(job)}
                 activeOpacity={0.9}
                 className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs flex-col gap-2.5"
@@ -112,8 +118,8 @@ export default function CariKerjaList({ logic }: { logic: CariKerjaLogic }) {
                 </View>
               </TouchableOpacity>
             );
-          })}
-        </View>
+          }}
+        />
       )}
     </View>
   );

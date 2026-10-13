@@ -11,7 +11,7 @@ export default ({ config }) => ({
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff",
+      backgroundColor: "#ff6b00",
     },
     scheme: "bisa",
     newArchEnabled: true,
@@ -21,11 +21,14 @@ export default ({ config }) => ({
     },
     android: {
       package: "com.bisaapp.app",
+      largeHeap: true,
       permissions: [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.INTERNET",
       ],
+      usesCleartextTraffic: true,
       adaptiveIcon: {
         backgroundColor: "#faf8ff",
         foregroundImage: "./assets/icon1.png",

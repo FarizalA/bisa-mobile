@@ -1,10 +1,19 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Star, MapPin, ChevronRight, MessageSquare } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { ensureConversationAndNavigate } from "../../lib/chatInbox";
 import { MitraUnggulanBadgeIcon } from "../home/ProviderCard";
 
-export default function KategoriProviderCard({ prov }: { prov: any }) {
+function getThumb(url?: string | null) {
+  if (!url || !url.startsWith("http")) return null;
+  if (url.includes("supabase.co") && !url.includes("?")) return `${url}?width=120&height=120&resize=cover&quality=70`;
+  return url;
+}
+
+function KategoriProviderCardComponent({ prov }: { prov: any }) {
   const router = useRouter();
   const isOnline = prov.is_available !== false && prov.status !== "Tidak Aktif";
   const skills = (prov.keahlian || "").split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -20,10 +29,13 @@ export default function KategoriProviderCard({ prov }: { prov: any }) {
       <View className="flex-row items-start gap-3.5">
         <View className="relative shrink-0">
           <Image
-            source={prov.face_url ? { uri: prov.face_url } : require("../../../assets/mascot.png")}
-            style={{ width: 60, height: 60, borderRadius: 18 }}
-            className="bg-slate-100"
-            resizeMode="cover"
+            source={getThumb(prov.face_url) ? { uri: getThumb(prov.face_url)! } : require("../../../assets/mascot.png")}
+            style={{ width: 60, height: 60, borderRadius: 18, backgroundColor: "#f1f5f9" }}
+            contentFit="cover"
+            transition={100}
+            cachePolicy="memory-disk"
+            priority="low"
+            recyclingKey={String(prov.id)}
           />
           <View className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${isOnline ? "bg-emerald-500" : "bg-slate-400"}`} />
         </View>
@@ -74,7 +86,20 @@ export default function KategoriProviderCard({ prov }: { prov: any }) {
           <Text className="text-sm font-black text-orange-600">{price ? `Rp${Number(price).toLocaleString("id-ID")}` : "Menyesuaikan"}</Text>
         </View>
         <View className="flex-row items-center gap-2">
-          <TouchableOpacity onPress={() => router.push(`/profil/${prov.id}` as any)} className="px-3.5 h-8 rounded-xl border border-slate-300 flex-row items-center gap-1">
+          <TouchableOpacity
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              try {
+                const convId = await ensureConversationAndNavigate(String(prov.id));
+                if (convId) {
+                  router.push(`/c/direct-chat/${convId}` as any);
+                  return;
+                }
+              } catch {}
+              router.push("/c/chat" as any);
+            }}
+            className="px-3.5 h-8 rounded-xl border border-slate-300 flex-row items-center gap-1"
+          >
             <MessageSquare size={14} color="#334155" />
             <Text className="text-slate-700 font-bold text-xs">Chat</Text>
           </TouchableOpacity>
@@ -87,3 +112,5 @@ export default function KategoriProviderCard({ prov }: { prov: any }) {
     </TouchableOpacity>
   );
 }
+const KategoriProviderCard = React.memo(KategoriProviderCardComponent);
+export default KategoriProviderCard;

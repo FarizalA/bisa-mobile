@@ -33,6 +33,8 @@ import {
 } from "../../src/lib/invoice";
 import { calculatePaymentBreakdown } from "../../src/lib/payment";
 import { safeBack } from "@/lib/navigation";
+import { getStoredUser } from "../../src/lib/user-storage";
+
 
 export default function InvoiceScreen() {
   const router = useRouter();
@@ -42,12 +44,17 @@ export default function InvoiceScreen() {
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isMitraView, setIsMitraView] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         setLoading(true);
+        const stored = await getStoredUser();
+        if (stored) {
+          setIsMitraView(stored.role === "mitra");
+        }
         const numId = Number(rawId.replace(/\D/g, ""));
 
         // 1. Coba ambil dari invoices_bisa dulu (sumber resmi nomor/order) — via RPC fallback kalau RLS ketat
@@ -153,7 +160,7 @@ export default function InvoiceScreen() {
           Data invoice untuk pesanan #{rawId} tidak tersedia.
         </Text>
         <TouchableOpacity
-          onPress={() => safeBack(router, "/")}
+          onPress={() => safeBack(router, isMitraView ? "/p/aktivitas" : "/c/aktivitas")}
           className="px-6 py-2.5 rounded-full bg-[#FF6B00]"
         >
           <Text className="text-white font-bold text-sm">Kembali</Text>
@@ -202,7 +209,7 @@ export default function InvoiceScreen() {
       {/* HEADER */}
       <View className="h-14 px-4 bg-white border-b border-gray-100 flex-row items-center justify-between">
         <TouchableOpacity
-          onPress={() => safeBack(router, "/")}
+          onPress={() => safeBack(router, isMitraView ? "/p/aktivitas" : "/c/aktivitas")}
           className="w-9 h-9 rounded-full bg-gray-50 items-center justify-center border border-gray-100"
         >
           <ArrowLeft size={18} color="#1F2937" />
@@ -232,7 +239,7 @@ export default function InvoiceScreen() {
                   {!isCOD && (
                     <View className="flex-row items-center gap-1 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full">
                       <ShieldCheck size={9} color="#047857" />
-                      <Text className="text-[9px] font-bold text-emerald-700">Rekber</Text>
+                      <Text className="text-[9px] font-bold text-emerald-700">Online</Text>
                     </View>
                   )}
                 </View>
@@ -253,6 +260,7 @@ export default function InvoiceScreen() {
                   <Clock size={10} color="#9CA3AF" />
                   <Text className="text-[10px] text-gray-400 font-medium">
                     {fmtDate(order.created_at)}
+                    {order.paid_at ? ` • Lunas: ${fmtDate(order.paid_at)}` : ""}
                   </Text>
                 </View>
               </View>
@@ -374,7 +382,7 @@ export default function InvoiceScreen() {
                 <Text className="font-medium">
                   {isCOD
                     ? " — dibayarkan tunai oleh Klien langsung di tempat."
-                    : " — diamankan Rekber BISA."}
+                    : " — otomatis masuk ke saldo setelah selesai."}
                 </Text>
               </Text>
             </View>
@@ -391,7 +399,7 @@ export default function InvoiceScreen() {
 
         {/* BOTTOM ACTION */}
         <TouchableOpacity
-          onPress={() => safeBack(router, "/")}
+          onPress={() => safeBack(router, isMitraView ? "/p/aktivitas" : "/c/aktivitas")}
           className="w-full py-3.5 rounded-2xl bg-white border border-gray-200 items-center justify-center shadow-xs"
         >
           <Text className="text-xs font-bold text-gray-700">Kembali ke Aktivitas</Text>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Image, Animated, useWindowDimensions } from "react-native";
 import {
   Clock,
@@ -58,8 +58,8 @@ interface AktivitasJobCardProps {
 }
 
 function PingDot() {
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.7)).current;
+  const [scale] = useState(() => new Animated.Value(1));
+  const [opacity] = useState(() => new Animated.Value(0.7));
   useEffect(() => {
     const loop = Animated.loop(
       Animated.parallel([
@@ -95,8 +95,7 @@ export default function AktivitasJobCard({
   onOpenInvoice,
   onOpenMitraProfile,
 }: AktivitasJobCardProps) {
-  const { width } = useWindowDimensions();
-  const isNarrow = width < 360;
+  useWindowDimensions();
 
   const isPaidEscrow = Boolean(job.agreed_price && job.payment_status === "escrow_held");
   const rawAgreed = job.agreed_price || parseInt(String(job.budget || "").replace(/\D/g, "") || "0", 10);
@@ -105,7 +104,8 @@ export default function AktivitasJobCard({
 
   const cleanDeskripsi = (job.deskripsi || "").replace(/\[EXPIRES_AT\]:\s*\d+/g, "").split("[INFO")[0].trim();
   const anyJob = job as any;
-  const elapsedWorkingMs = anyJob.created_at ? Date.now() - new Date(anyJob.created_at).getTime() : 0;
+  const [renderNow] = useState(() => Date.now());
+  const elapsedWorkingMs = anyJob.created_at ? renderNow - new Date(anyJob.created_at).getTime() : 0;
   const isWorkingOver24h = isPaidEscrow && (job.status === "sedang_dikerjakan" || job.status === "mitra_ditemukan") && elapsedWorkingMs > 24 * 3600 * 1000 && !anyJob.work_file_url && !anyJob.work_link_url;
   const invNumber = (job as any).invoice_number || formatNoInvoice(job.id, (job as any).created_at);
 
@@ -146,6 +146,8 @@ export default function AktivitasJobCard({
             <View className="bg-emerald-100 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-emerald-200"><CheckCircle2 size={11} color="#047857" /><Text className="text-[10px] font-bold text-emerald-800">Selesai & Lunas</Text></View>
           ) : job.status === "dibatalkan" ? (
             <View className="bg-red-100 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-red-100"><XCircle size={11} color="#b91c1c" /><Text className="text-[10px] font-bold text-red-700">Dibatalkan</Text></View>
+          ) : job.status === "menunggu_persetujuan_batal" ? (
+            <View className="bg-amber-100 px-2.5 py-1 rounded-full border border-amber-200 flex-row items-center gap-1"><Clock size={11} color="#b45309" /><Text className="text-[10px] font-bold text-amber-800">Menunggu Respon Mitra</Text></View>
           ) : (
             <View className="bg-emerald-50 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-emerald-100"><CheckCircle2 size={11} color="#059669" /><Text className="text-[10px] font-bold text-emerald-700">Sedang Dikerjakan</Text></View>
           )}
@@ -163,6 +165,12 @@ export default function AktivitasJobCard({
           )}
         </View>
         <Text className="text-[11px] font-black text-orange-600 tracking-wide uppercase leading-none" numberOfLines={1}>{invNumber}</Text>
+        <View className="flex-row items-center gap-1 mt-0.5">
+          <Clock size={10} color="#9ca3af" />
+          <Text className="text-[11px] font-bold text-gray-400">
+            {(job as any).created_at ? new Date((job as any).created_at).toLocaleString("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " WIB" : "—"}
+          </Text>
+        </View>
         {cleanDeskripsi ? <Text className="text-xs text-gray-500 leading-relaxed mt-1" numberOfLines={2} ellipsizeMode="tail">{cleanDeskripsi}</Text> : null}
       </TouchableOpacity>
 
@@ -184,13 +192,13 @@ export default function AktivitasJobCard({
         </View>
       </View>
 
-      {/* 4. Rekber badge — rapih, Aman di kanan tidak ketiban */}
+      {/* 4. Pembayaran Online badge — rapih, Aman di kanan tidak ketiban */}
       {isPaidEscrow && (
         <View className="bg-emerald-50 border border-emerald-200 rounded-2xl px-3 py-3 flex-row items-center justify-between gap-2">
           <View className="flex-row items-center gap-2.5 flex-1 min-w-0">
             <View className="w-9 h-9 rounded-full bg-white border border-emerald-200 items-center justify-center shadow-sm shrink-0"><Lock size={16} color="#059669" /></View>
             <View className="flex-1 min-w-0">
-              <Text className="text-[9px] font-black text-emerald-700 tracking-widest uppercase leading-none mb-1">Rekber BISA • Aman</Text>
+              <Text className="text-[9px] font-black text-emerald-700 tracking-widest uppercase leading-none mb-1">Pembayaran Online • Aman</Text>
               <Text className="text-xs font-black text-emerald-900 leading-none" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Dana {formatRupiah(breakdown?.totalBuyerPays || agreedPrice)} Ditahan</Text>
             </View>
           </View>
@@ -242,7 +250,27 @@ export default function AktivitasJobCard({
         </View>
       )}
 
-      {(job.status === "sedang_dikerjakan" || job.status === "menunggu_konfirmasi_selesai" || isPaidEscrow) && job.status !== "selesai" && (
+      {job.status === "menunggu_persetujuan_batal" && (
+        <View className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex-col gap-2">
+          <View className="flex-row items-center gap-2">
+            <Clock size={15} color="#b45309" />
+            <Text className="text-xs font-black text-amber-900">Pengajuan Pembatalan Dikirim</Text>
+          </View>
+          <Text className="text-[11px] text-amber-800 leading-relaxed">
+            Menunggu respon Mitra (maksimal 24 jam). Jika Mitra tidak merespon dalam 24 jam, dana akan otomatis dikembalikan ke saldo dompet Anda.
+          </Text>
+          <TouchableOpacity
+            onPress={() => onOpenChat(job)}
+            activeOpacity={0.88}
+            className="w-full py-2.5 rounded-xl bg-white border border-amber-300 items-center justify-center flex-row gap-1.5 mt-1"
+          >
+            <MessageSquare size={13} color="#b45309" />
+            <Text className="text-xs font-bold text-amber-900">Hubungi Mitra di Chat</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {(job.status === "sedang_dikerjakan" || job.status === "menunggu_konfirmasi_selesai" || isPaidEscrow) && job.status !== "selesai" && job.status !== "menunggu_persetujuan_batal" && (
         <View className="flex-col gap-2">
           <TouchableOpacity
             onPress={() => (isWorkingOver24h ? onCancelJob(job.id) : onMutualCancel(job))}
@@ -260,7 +288,7 @@ export default function AktivitasJobCard({
             style={{ shadowColor: "#059669", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 }}
           >
             <CheckCircle2 size={16} color="#fff" />
-            <Text className="text-xs font-black text-white text-center flex-1 px-1" numberOfLines={2} style={{ lineHeight: 16 }}>
+            <Text className="text-xs font-black text-white text-center" numberOfLines={2} style={{ lineHeight: 16 }}>
               {releasingJobId === job.id ? "Memproses..." : isPaidEscrow ? `Konfirmasi Selesai & Rilis Dana (${formatRupiah(agreedPrice)})` : "Tandai Pekerjaan Selesai"}
             </Text>
           </TouchableOpacity>

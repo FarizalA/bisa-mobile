@@ -45,7 +45,11 @@ export default function BottomNav({ active }: { active: NavTab }) {
   const handlePress = (tab: NavTab, path: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (active === tab) return;
-    router.replace(path as any);
+    try {
+      (router as any).navigate(path as any);
+    } catch {
+      router.replace(path as any);
+    }
   };
 
   return (
@@ -59,7 +63,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`p-1.5 rounded-xl ${active === "home" ? "bg-orange-50" : ""}`}>
+        <View className={`p-1.5 rounded-full ${active === "home" ? "bg-orange-50" : ""}`}>
           <Home size={20} color={active === "home" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text
@@ -77,7 +81,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`p-1.5 rounded-xl ${active === "radar" ? "bg-orange-50" : ""}`}>
+        <View className={`p-1.5 rounded-full ${active === "radar" ? "bg-orange-50" : ""}`}>
           <Compass size={20} color={active === "radar" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text
@@ -107,7 +111,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1 relative"
       >
-        <View className={`p-1.5 rounded-xl relative ${active === "aktivitas" ? "bg-orange-50" : ""}`}>
+        <View className={`p-1.5 rounded-full relative ${active === "aktivitas" ? "bg-orange-50" : ""}`}>
           <Briefcase size={20} color={active === "aktivitas" ? "#ff6b00" : "#9ca3af"} />
           {activeJobsCount > 0 && (
             <View className="absolute -top-1 -right-1 bg-[#ff6b00] w-4 h-4 rounded-full items-center justify-center border border-white">
@@ -130,7 +134,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`p-1.5 rounded-xl ${active === "profil" ? "bg-orange-50" : ""}`}>
+        <View className={`p-1.5 rounded-full ${active === "profil" ? "bg-orange-50" : ""}`}>
           <User size={20} color={active === "profil" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text

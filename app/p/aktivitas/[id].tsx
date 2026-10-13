@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import {
   ArrowLeft,
   MessageSquare,
@@ -27,14 +27,22 @@ import {
   X,
   Link2,
   Handshake,
+  Clock,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../../../src/lib/supabase";
 import { getStoredUser } from "../../../src/lib/user-storage";
-import { formatRupiah } from "../../../src/lib/payment";
+import {
+  formatRupiah,
+  processOrderRefund,
+  respondOrderCancellation,
+  checkAndProcessExpiredCancellations,
+} from "../../../src/lib/payment";
+import { fmtDate } from "../../../src/lib/invoice";
 import { safeBack } from "@/lib/navigation";
-import { compressImage } from "../../../src/lib/imageCompression";
+import { compressImage, compressImageWithBase64, base64ToUint8Array } from "../../../src/lib/imageCompression";
+import { checkAndSyncMidtransStatus } from "../../../src/lib/midtransDirect";
 
 interface JobDetail {
   id: number;
@@ -59,6 +67,9 @@ interface JobDetail {
   work_note: string | null;
   pelanggan_id: number;
   mitra_id: number;
+  cancel_requested_at?: string | null;
+  cancel_reason?: string | null;
+  alasan_penolakan?: string | null;
   pelanggan?: {
     id: number;
     name: string;
@@ -92,6 +103,12 @@ export default function MitraOrderDetailPage() {
   const [mutualReason, setMutualReason] = useState("");
   const [mutualActing, setMutualActing] = useState(false);
 
+  // Cancel Request by Client
+  const [showRejectCancelModal, setShowRejectCancelModal] = useState(false);
+  const [rejectCancelReason, setRejectCancelReason] = useState("");
+  const [cancelResponding, setCancelResponding] = useState(false);
+  const [cancelCountdown, setCancelCountdown] = useState<string | null>(null);
+
   // Nice popup (ganti window.alert jelek localhost:8081 says)
   const [alertInfo, setAlertInfo] = useState<{ show: boolean; title: string; message: string; variant: "success" | "error" | "info" }>({
     show: false,
@@ -117,10 +134,43 @@ export default function MitraOrderDetailPage() {
   const [offerExpired, setOfferExpired] = useState(false);
   const [feePct, setFeePct] = useState<number | null>(null);
 
+  // Realtime subscription untuk auto-update status (misal klien klik terima pesanan -> step 4 auto terceklis)
+  useEffect(() => {
+    if (!jobId) return;
+    const numJobId = Number(jobId);
+    const channel = supabase
+      .channel(`pekerjaan_bisa_mitra_${numJobId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "pekerjaan_bisa",
+          filter: `id=eq.${numJobId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setJob((prev: any) => (prev ? { ...prev, ...payload.new } : (payload.new as any)));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [jobId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobDetail();
+      checkAndProcessExpiredCancellations();
+    }, [jobId])
+  );
+
   useEffect(() => {
     let isMounted = true;
     if (jobId) {
-      fetchJobDetail();
       supabase
         .from("admin_settings")
         .select("value")
@@ -146,6 +196,31 @@ export default function MitraOrderDetailPage() {
       isMounted = false;
     };
   }, [jobId]);
+
+  // 24h cancel window: Menunggu Persetujuan Batal -> auto refund jika mitra tidak respon
+  useEffect(() => {
+    if (!job || job.status !== "menunggu_persetujuan_batal") {
+      setCancelCountdown(null);
+      return;
+    }
+    const base = (job as any).cancel_requested_at || job.created_at;
+    const deadline = new Date(base).getTime() + 24 * 3600 * 1000;
+    const tick = () => {
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        setCancelCountdown("00:00:00 (Batas Waktu Habis)");
+        checkAndProcessExpiredCancellations().then(() => fetchJobDetail());
+        return;
+      }
+      const h = Math.floor(left / 3600000);
+      const m = Math.floor((left % 3600000) / 60000);
+      const s = Math.floor((left % 60000) / 1000);
+      setCancelCountdown(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [job]);
 
   useEffect(() => {
     if (!job || job.status !== "menunggu_konfirmasi_selesai") {
@@ -221,12 +296,9 @@ export default function MitraOrderDetailPage() {
         return;
       }
 
-      // Auto-sync status dari Midtrans jika status masih pending di localhost
+      // Auto-sync status langsung ke Midtrans API
       try {
-        const isWeb = Platform.OS === "web";
-        const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-        const backendUrl = rawApi || (!isWeb ? "https://bisa-app.vercel.app" : "http://localhost:3000");
-        await fetch(`${backendUrl}/api/payment/sync?jobId=${jobId}`);
+        await checkAndSyncMidtransStatus(Number(jobId));
       } catch {}
 
       const { data, error } = await supabase
@@ -310,13 +382,12 @@ export default function MitraOrderDetailPage() {
     try {
       const storedUser: any = await getStoredUser();
       const effectiveMitraId = Number(job.mitra_id || storedUser?.id);
-      const { error: updErr } = await supabase.from("pekerjaan_bisa").update({ status: "dibatalkan", payment_status: "cancelled" }).eq("id", job.id);
-      if (updErr) throw updErr;
+      const res = await processOrderRefund(job.id, rejectReason.trim() ? `Alasan: ${rejectReason.trim()}` : "Ditolak oleh Mitra");
       try {
         const { ensureConversationAndNavigate } = await import("../../../src/lib/chatInbox");
         const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), job.id, true);
         if (convId) {
-          const rejectMsg = `❌ Mitra menolak pesanan ini.${rejectReason.trim() ? ` Alasan: ${rejectReason.trim()}` : ''}`;
+          const rejectMsg = `❌ Mitra menolak pesanan ini.${rejectReason.trim() ? ` Alasan: ${rejectReason.trim()}` : ''}${res.refunded ? ` Dana telah dikembalikan ke saldo Klien.` : ''}`;
           await supabase.from("messages").insert({ conversation_id: convId, sender_id: String(effectiveMitraId), message_type: "system", content: rejectMsg } as any);
           await supabase.from("conversations").update({ last_message: rejectMsg, last_message_at: new Date().toISOString() } as any).eq("id", convId);
         }
@@ -332,7 +403,7 @@ export default function MitraOrderDetailPage() {
     }
   };
 
-  const API_BASE = (process.env.EXPO_PUBLIC_API_URL as string) || "https://bisa-app.vercel.app";
+  const API_BASE = (process.env.EXPO_PUBLIC_API_URL as string) || "https://bisa-admin.vercel.app";
 
   const handlePickImage = async () => {
     try {
@@ -361,15 +432,20 @@ export default function MitraOrderDetailPage() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8,
+        base64: true,
       });
       if (!res.canceled && res.assets[0]?.uri) {
         let uri = res.assets[0].uri;
+        let base64 = res.assets[0].base64;
         try {
-          uri = await compressImage(uri);
+          const comp = await compressImageWithBase64(uri);
+          uri = comp.uri;
+          if (comp.base64) base64 = comp.base64;
         } catch (error) {
           console.error("Gagal kompresi foto:", error);
         }
         setDeliveryImageUri(uri);
+        (globalThis as any)._deliveryBase64 = base64;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
     } catch (e: any) {
@@ -393,27 +469,36 @@ export default function MitraOrderDetailPage() {
       let fileUrl: string | null = null;
       if (deliveryImageUri) {
         const fileName = `job_${job.id}_${Date.now()}.jpg`;
-        const path = `deliveries/${fileName}`;
         try {
           let uploadPayload: any;
           let contentType = "image/jpeg";
           if (Platform.OS === "web" && (window as any)._deliveryFile) {
             uploadPayload = (window as any)._deliveryFile as File;
             contentType = uploadPayload.type || contentType;
+          } else if ((globalThis as any)._deliveryBase64) {
+            uploadPayload = base64ToUint8Array((globalThis as any)._deliveryBase64);
           } else {
             const resp = await fetch(deliveryImageUri);
-            const blob = await resp.blob();
-            contentType = (blob as any).type || contentType;
-            if (Platform.OS === "web") {
-              uploadPayload = blob;
-            } else {
-              uploadPayload = await blob.arrayBuffer();
-            }
+            uploadPayload = await resp.blob();
           }
-          const { error: upErr } = await supabase.storage.from("deliveries").upload(path, uploadPayload as any, { contentType, upsert: true });
+
+          // Coba upload ke job_attachments (chat_images) yang 100% stabil & publik
+          const { error: upErr } = await supabase.storage
+            .from("job_attachments")
+            .upload(`chat_images/${fileName}`, uploadPayload, { contentType, upsert: true });
+
           if (!upErr) {
-            const { data } = supabase.storage.from("deliveries").getPublicUrl(path);
+            const { data } = supabase.storage.from("job_attachments").getPublicUrl(`chat_images/${fileName}`);
             fileUrl = data.publicUrl || null;
+          } else {
+            console.warn("[Delivery] job_attachments error, fallback to deliveries:", upErr.message);
+            const { error: fbErr } = await supabase.storage
+              .from("deliveries")
+              .upload(`deliveries/${fileName}`, uploadPayload, { contentType, upsert: true });
+            if (!fbErr) {
+              const { data } = supabase.storage.from("deliveries").getPublicUrl(`deliveries/${fileName}`);
+              fileUrl = data.publicUrl || null;
+            }
           }
         } catch (up: any) {
           console.warn("[Delivery] storage upload catch:", up?.message || up);
@@ -494,14 +579,9 @@ export default function MitraOrderDetailPage() {
     if (!job) return;
     setMutualActing(true);
     try {
-      const updatePayload: any = {
-        status: "dibatalkan",
-        payment_status: job.payment_method === "MIDTRANS" ? "refunded" : "cod_cancelled",
-      };
-      const { error: updErr } = await supabase.from("pekerjaan_bisa").update(updatePayload).eq("id", job.id);
-      if (updErr) throw updErr;
+      const res = await processOrderRefund(job.id, mutualReason.trim() ? `Batal Sepakat: ${mutualReason.trim()}` : "Batal Sepakat Bersama");
 
-      const cancelMsg = `❌ Pesanan dibatalkan secara bersama (mutual) oleh Klien & Mitra: ${job.judul || 'Pesanan #' + job.id}${mutualReason.trim() ? ` Alasan: ${mutualReason.trim()}` : ''}`;
+      const cancelMsg = `❌ Pesanan dibatalkan secara bersama (mutual) oleh Klien & Mitra: ${job.judul || 'Pesanan #' + job.id}${mutualReason.trim() ? ` Alasan: ${mutualReason.trim()}` : ''}${res.refunded ? ` (Dana sebesar Rp ${res.amount.toLocaleString("id-ID")} dikembalikan ke saldo Klien)` : ''}`;
 
       try {
         const { ensureConversationAndNavigate } = await import("../../../src/lib/chatInbox");
@@ -522,12 +602,43 @@ export default function MitraOrderDetailPage() {
 
       setShowMutualModal(false);
       setMutualReason("");
-      showNiceAlert("Batal Sepakat Berhasil", "Pesanan telah dibatalkan bersama.", "success");
+      showNiceAlert("Batal Sepakat Berhasil", res.refunded ? "Pesanan telah dibatalkan. Dana dikembalikan ke Klien." : "Pesanan telah dibatalkan bersama.", "success");
       await fetchJobDetail();
     } catch (e: any) {
       showNiceAlert("Gagal", e.message || "Terjadi kesalahan", "error");
     } finally {
       setMutualActing(false);
+    }
+  };
+
+  const handleMitraApproveCancel = async () => {
+    if (!job) return;
+    setCancelResponding(true);
+    try {
+      const res = await respondOrderCancellation(job.id, true);
+      showNiceAlert("Pembatalan Disetujui", "Pesanan telah dibatalkan dan dana dikembalikan ke Klien.", "success");
+      await fetchJobDetail();
+    } catch (e: any) {
+      showNiceAlert("Gagal", e.message || "Gagal menyetujui pembatalan", "error");
+    } finally {
+      setCancelResponding(false);
+    }
+  };
+
+  const handleMitraRejectCancel = async () => {
+    if (!job) return;
+    setCancelResponding(true);
+    try {
+      const reasonText = rejectCancelReason.trim() || "Pekerjaan sedang berlangsung / progres > 80%";
+      await respondOrderCancellation(job.id, false, reasonText);
+      setShowRejectCancelModal(false);
+      setRejectCancelReason("");
+      showNiceAlert("Pembatalan Ditolak", "Pekerjaan tetap dilanjutkan. Jika ada kendala, hubungi Pusat Bantuan.", "info");
+      await fetchJobDetail();
+    } catch (e: any) {
+      showNiceAlert("Gagal", e.message || "Gagal menolak pembatalan", "error");
+    } finally {
+      setCancelResponding(false);
     }
   };
 
@@ -573,7 +684,8 @@ export default function MitraOrderDetailPage() {
   const isWaitingPayment = job.status === "menunggu_pembayaran";
   const isWorking = ["sedang_dikerjakan", "mitra_ditemukan", "revisi_diminta"].includes(job.status);
   const isDelivered = job.status === "menunggu_konfirmasi_selesai";
-  const isDone = job.status === "selesai";
+  const isPendingCancel = job.status === "menunggu_persetujuan_batal";
+  const isDone = job.status === "selesai" || job.payment_status === "released" || job.payment_status === "cod_completed";
   const isCancelled = job.status === "dibatalkan" || job.status === "expired" || job.status === "ditolak";
 
   return (
@@ -585,12 +697,18 @@ export default function MitraOrderDetailPage() {
             <ArrowLeft size={18} color="#374151" />
           </TouchableOpacity>
           <View>
-            <Text className="text-sm font-black text-gray-900 leading-none">Detail Pesanan & Invoice</Text>
-            <View className="flex-row items-center gap-1 mt-1">
-              <Text className="text-[10px] text-gray-400 font-mono">#{String(job.id).slice(0, 8)}</Text>
-              <TouchableOpacity onPress={() => Alert.alert("ID Disalin", `#${job.id}`)}>
-                <Copy size={11} color="#9ca3af" />
-              </TouchableOpacity>
+            <View className="flex-col">
+              <Text className="text-sm font-black text-gray-900 leading-none">Detail Pesanan & Invoice</Text>
+              <View className="flex-row items-center gap-1 mt-1">
+                <Text className="text-[10px] text-gray-400 font-mono">#{String(job.id).slice(0, 8)}</Text>
+                <TouchableOpacity onPress={() => Alert.alert("ID Disalin", `#${job.id}`)}>
+                  <Copy size={11} color="#9ca3af" />
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row items-center gap-1 mt-0.5">
+                <Clock size={9} color="#9CA3AF" />
+                <Text className="text-[10px] text-gray-400 font-medium">{fmtDate(job.created_at)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -615,6 +733,8 @@ export default function MitraOrderDetailPage() {
                   <Text className="text-xs font-black text-blue-900">
                     {isDone
                       ? "Selesai & Lunas"
+                      : isPendingCancel
+                      ? "Menunggu Persetujuan Batal"
                       : isDelivered
                       ? "Menunggu Konfirmasi Klien"
                       : isWorking
@@ -634,6 +754,12 @@ export default function MitraOrderDetailPage() {
                     <Text className="text-[11px] font-black text-amber-800 tabular-nums">{offerCountdown}</Text>
                   </View>
                 )}
+                {isPendingCancel && cancelCountdown && (
+                  <View className="px-2.5 py-1 rounded-full bg-red-50 border border-red-200 flex-row items-center gap-1">
+                    <Timer size={11} color="#b91c1c" />
+                    <Text className="text-[11px] font-black text-red-700 tabular-nums">{cancelCountdown}</Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -642,7 +768,7 @@ export default function MitraOrderDetailPage() {
               {[
                 { label: "Pesanan", done: true, active: true },
                 { label: isCOD ? "Konfirmasi" : "Escrow", done: isPaid && !isPendingApproval, active: isPendingApproval || isPaid || isWaitingPayment },
-                { label: "Pengerjaan", done: isDelivered || isDone, active: isWorking || isDelivered || isDone },
+                { label: "Pengerjaan", done: isDelivered || isDone, active: isWorking || isDelivered || isDone || isPendingCancel },
                 { label: "Selesai", done: isDone, active: isDone },
               ].map((s, idx) => (
                 <View key={idx} className="items-center flex-col">
@@ -658,6 +784,31 @@ export default function MitraOrderDetailPage() {
               ))}
             </View>
           </View>
+
+          {/* Banner Pengajuan Pembatalan oleh Klien */}
+          {isPendingCancel && (
+            <View className="bg-amber-50 rounded-2xl p-4 border border-amber-300 shadow-xs flex-col gap-2.5">
+              <View className="flex-row items-center gap-2">
+                <View className="w-8 h-8 rounded-full bg-amber-100 items-center justify-center">
+                  <Clock size={16} color="#b45309" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-black text-amber-900">Klien Mengajukan Pembatalan</Text>
+                  <Text className="text-[10px] text-amber-700">Respon dalam 24 jam atau saldo otomatis di-refund ke Klien</Text>
+                </View>
+              </View>
+              <View className="bg-white rounded-xl p-3 border border-amber-200">
+                <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Alasan Klien:</Text>
+                <Text className="text-xs font-medium text-gray-800 italic">
+                  "{job.cancel_reason || job.alasan_penolakan || 'Klien mengajukan pembatalan pesanan'}"
+                </Text>
+              </View>
+              <View className="flex-row items-center justify-between pt-0.5">
+                <Text className="text-[11px] font-bold text-amber-800">Batas Waktu Respon:</Text>
+                <Text className="text-xs font-black text-red-600 font-mono">{cancelCountdown || "24 Jam"}</Text>
+              </View>
+            </View>
+          )}
 
           {/* 2. Informasi Klien */}
           <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs">
@@ -686,25 +837,39 @@ export default function MitraOrderDetailPage() {
             </View>
           </View>
 
-          {/* 3. Rincian Pekerjaan */}
-          <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex-col gap-1">
-            <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Rincian Pekerjaan</Text>
-            <Text className="text-base font-black text-gray-900 mt-1">{job.judul}</Text>
-            <Text className="text-xs text-gray-500 leading-relaxed mt-0.5">
-              {job.deskripsi?.replace(/\[EXPIRES_AT\][\s\S]*$/, "").trim() || "Pesanan langsung dari profil mitra."}
-            </Text>
-            {isCOD && <Text className="text-xs text-gray-500 font-semibold mt-0.5">Metode Pembayaran: COD</Text>}
+          {/* 3. Rincian Pekerjaan — header alasan pembatalan saat Dibatalkan */}
+          <View className={`rounded-2xl p-4 border shadow-xs flex-col gap-1 ${isCancelled ? "bg-amber-50/70 border-amber-200" : "bg-white border-gray-100"}`}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Rincian Pekerjaan</Text>
+              <View className="flex-row items-center gap-1">
+                <Clock size={10} color="#9CA3AF" />
+                <Text className="text-[10px] font-bold text-gray-500">{fmtDate(job.created_at)}</Text>
+              </View>
+            </View>
+            <Text className={`text-base font-black mt-1 ${isCancelled ? "text-gray-900" : "text-gray-900"}`}>{job.judul}</Text>
+            {isCancelled ? (
+              <View className="mt-2 bg-white rounded-xl border border-amber-200 px-3 py-2.5 flex-col gap-1">
+                <Text className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wide">Alasan Pembatalan</Text>
+                <Text className="text-xs text-gray-700 leading-relaxed">
+                  {(job as any).cancel_reason || "Pesanan dibatalkan — menunggu konfirmasi / kedaluwarsa."}
+                </Text>
+              </View>
+            ) : (
+              <Text className="text-xs text-gray-500 leading-relaxed mt-0.5">
+                {job.deskripsi?.replace(/\[EXPIRES_AT\][\s\S]*$/, "").replace(/Metode Pembayaran:\s*COD/gi, "").replace(/Donasi:[^\n]*/gi, "").replace(/\n{2,}/g, "\n").trim() || "Pesanan langsung dari profil mitra."}
+              </Text>
+            )}
           </View>
 
           {/* 4. Rincian Pembayaran (COD / Escrow) */}
           <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-xs flex-col gap-2.5">
             <View className="flex-row items-center justify-between pb-2 border-b border-gray-100">
               <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                {isCOD ? "Rincian Pembayaran (COD)" : "Rincian Pembayaran Escrow"}
+                {isCOD ? "Rincian Pembayaran (COD)" : "Rincian Pembayaran Online"}
               </Text>
               <View className={`px-2 py-0.5 rounded-full border ${isCOD ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
                 <Text className={`text-[10px] font-black ${isCOD ? "text-amber-800" : "text-emerald-700"}`}>
-                  {isCOD ? "Bayar di Tempat (COD)" : "Rekber Online"}
+                  {isCOD ? "Bayar di Tempat (COD)" : "Pembayaran Online"}
                 </Text>
               </View>
             </View>
@@ -749,7 +914,7 @@ export default function MitraOrderDetailPage() {
                   ? '⏳ Klien memilih Bayar di Tempat (COD). Terima pesanan untuk mulai pengerjaan — pembayaran tunai diselesaikan setelah Klien klik "Terima Pesanan".'
                   : isCOD
                   ? '💵 Pembayaran dilakukan secara tunai oleh Klien setelah hasil kerja selesai dan Klien mengklik "Terima Pesanan".'
-                  : `🔒 Dana aman di Rekber BISA. Begitu Klien menerima hasil kerja, dana bersih ${formatRupiah(netEarnings)} langsung masuk ke Saldo Dompet Anda.`}
+                  : `🔒 Pembayaran berhasil. Begitu Klien menerima hasil kerja, dana bersih ${formatRupiah(netEarnings)} langsung masuk ke Saldo Dompet Anda.`}
               </Text>
             </View>
           </View>
@@ -764,9 +929,18 @@ export default function MitraOrderDetailPage() {
                 </View>
               )}
               {job.work_file_url && (
-                <View className="w-full aspect-video rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(job.work_file_url!)}
+                  activeOpacity={0.88}
+                  className="w-full rounded-xl overflow-hidden bg-gray-100 border border-gray-200"
+                  style={{ height: 200 }}
+                >
                   <Image source={{ uri: job.work_file_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-                </View>
+                  <View className="absolute bottom-2 right-2 bg-black/60 px-2.5 py-1 rounded-full flex-row items-center gap-1">
+                    <FileText size={10} color="#fff" />
+                    <Text className="text-[10px] font-bold text-white">Ketuk untuk Buka Foto</Text>
+                  </View>
+                </TouchableOpacity>
               )}
               {job.work_link_url && (
                 <TouchableOpacity onPress={() => Linking.openURL(job.work_link_url!)} className="flex-row items-center gap-1.5 bg-blue-50 p-2.5 rounded-xl border border-blue-100">
@@ -820,6 +994,38 @@ export default function MitraOrderDetailPage() {
               >
                 <FileText size={15} color="#ffffff" />
                 <Text className="text-xs font-black text-white">Kirim Hasil Kerja</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {isPendingCancel && (
+            <>
+              <TouchableOpacity
+                onPress={() => setShowRejectCancelModal(true)}
+                disabled={cancelResponding}
+                className="flex-1 py-3.5 rounded-full border border-red-300 bg-red-50 items-center justify-center"
+              >
+                <Text className="text-xs font-bold text-red-700">Tolak (&gt;80%)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  Alert.alert(
+                    "Setujui Pembatalan?",
+                    "Saldo akan dikembalikan secara penuh ke Klien dan pesanan akan ditutup.",
+                    [
+                      { text: "Batal", style: "cancel" },
+                      { text: "Ya, Setujui", style: "destructive", onPress: handleMitraApproveCancel },
+                    ]
+                  );
+                }}
+                disabled={cancelResponding}
+                className="flex-1 py-3.5 rounded-full bg-red-600 items-center justify-center shadow-md"
+              >
+                {cancelResponding ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text className="text-xs font-black text-white">Setujui Batal</Text>
+                )}
               </TouchableOpacity>
             </>
           )}
@@ -1029,7 +1235,7 @@ export default function MitraOrderDetailPage() {
               </View>
             </View>
             <Text className="text-xs text-gray-600 leading-relaxed">
-              {isCOD ? "Pesanan COD akan dibatalkan secara langsung." : "Dana Rekber akan langsung dikembalikan ke Klien."}
+              {isCOD ? "Pesanan COD akan dibatalkan secara langsung." : "Dana akan langsung dikembalikan ke Klien."}
             </Text>
             <TextInput
               value={mutualReason}
@@ -1046,6 +1252,61 @@ export default function MitraOrderDetailPage() {
               </TouchableOpacity>
               <TouchableOpacity onPress={handleMutualCancel} disabled={mutualActing} className="flex-1 py-3 rounded-full bg-red-600 items-center justify-center">
                 {mutualActing ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-xs font-black text-white">Batalkan Bersama</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Tolak Pembatalan (Progres > 80% / Komplain) */}
+      <Modal visible={showRejectCancelModal} transparent animationType="fade" onRequestClose={() => setShowRejectCancelModal(false)}>
+        <View className="flex-1 bg-black/50 items-center justify-center px-4">
+          <View className="bg-white rounded-[24px] w-full max-w-sm p-5 gap-3.5">
+            <View className="flex-row items-center justify-between border-b border-gray-100 pb-2.5">
+              <View className="flex-row items-center gap-2">
+                <View className="w-8 h-8 rounded-full bg-amber-100 items-center justify-center">
+                  <Clock size={16} color="#b45309" />
+                </View>
+                <View>
+                  <Text className="font-black text-gray-900 text-sm">Tolak Pembatalan</Text>
+                  <Text className="text-[10px] text-gray-500">Pekerjaan sudah berjalan / &gt; 80%</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setShowRejectCancelModal(false)} className="w-7 h-7 rounded-full bg-gray-100 items-center justify-center">
+                <X size={15} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-xs text-gray-600 leading-relaxed">
+              Jika pekerjaan telah dikerjakan atau hampir selesai (&gt; 80%), Anda berhak menolak pembatalan. Pesanan akan tetap berjalan. Anda juga dapat mengajukan komplain ke Pusat Bantuan jika terjadi perselisihan.
+            </Text>
+
+            <TextInput
+              value={rejectCancelReason}
+              onChangeText={setRejectCancelReason}
+              placeholder="Alasan penolakan (misal: pengerjaan sudah 85%)..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={3}
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 min-h-[75px]"
+            />
+
+            <TouchableOpacity
+              onPress={() => {
+                setShowRejectCancelModal(false);
+                router.push("/p/bantuan" as any);
+              }}
+              className="w-full py-2.5 rounded-xl bg-amber-50 border border-amber-200 items-center justify-center flex-row gap-1.5"
+            >
+              <Text className="text-xs font-bold text-amber-800">Butuh Bantuan? Buka Pusat Bantuan</Text>
+            </TouchableOpacity>
+
+            <View className="flex-row gap-2 mt-1">
+              <TouchableOpacity onPress={() => setShowRejectCancelModal(false)} className="flex-1 py-3 rounded-full border border-gray-200 items-center justify-center">
+                <Text className="text-xs font-bold text-gray-700">Tutup</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleMitraRejectCancel} disabled={cancelResponding} className="flex-1 py-3 rounded-full bg-red-600 items-center justify-center shadow-md">
+                {cancelResponding ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-xs font-black text-white">Tolak Pengajuan</Text>}
               </TouchableOpacity>
             </View>
           </View>

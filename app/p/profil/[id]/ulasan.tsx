@@ -113,7 +113,7 @@ export default function MitraPublicReviewsPage() {
     <SafeAreaView edges={["top"]} className="flex-1 bg-[#faf8ff]">
       {/* HEADER */}
       <View className="h-14 px-4 flex-row items-center gap-3 bg-[#faf8ff] border-b border-gray-100">
-        <TouchableOpacity onPress={() => safeBack(router, "/c/home")} className="w-9 h-9 rounded-full bg-white items-center justify-center border border-gray-100">
+        <TouchableOpacity onPress={() => safeBack(router, `/p/profil/${id}`)} className="w-9 h-9 rounded-full bg-white items-center justify-center border border-gray-100">
           <ArrowLeft size={18} color="#131B2E" />
         </TouchableOpacity>
         <View className="flex-1 min-w-0">

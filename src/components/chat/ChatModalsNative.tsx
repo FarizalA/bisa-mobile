@@ -125,7 +125,7 @@ export function MobileInvoiceModal({
               </View>
               <View>
                 <Text className="font-extrabold text-base text-gray-900">Buat Tagihan / Invoice</Text>
-                <Text className="text-[11px] text-gray-500 font-medium">Kirim kartu pesanan escrow ke klien</Text>
+                <Text className="text-[11px] text-gray-500 font-medium">Kirim kartu pesanan ke klien</Text>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} className="p-1">
@@ -257,7 +257,7 @@ export function MobileOrderDetailModal({
                       {!isCOD && (
                         <View className="flex-row items-center gap-1 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full">
                           <ShieldCheck size={9} color="#047857" />
-                          <Text className="text-[9px] font-bold text-emerald-700">Rekber</Text>
+                          <Text className="text-[9px] font-bold text-emerald-700">Online</Text>
                         </View>
                       )}
                     </View>
@@ -350,7 +350,7 @@ export function MobileOrderDetailModal({
                   <CheckCircle2 size={14} color={isCOD ? "#CA8A04" : "#059669"} style={{ marginTop: 2 }} />
                   <Text className={`text-[11px] leading-4 flex-1 ${isCOD ? "text-[#854D0E]" : "text-emerald-800"}`}>
                     <Text className="font-extrabold">Mitra terima {formatRupiah(breakdown.agreedPrice)}</Text>{" "}
-                    {isCOD ? "— dibayarkan tunai oleh Klien setelah selesai." : "— diamankan Rekber BISA."}
+                    {isCOD ? "— dibayarkan tunai oleh Klien setelah selesai." : "— otomatis masuk ke saldo setelah selesai."}
                   </Text>
                 </View>
 

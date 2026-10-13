@@ -116,7 +116,7 @@ export default function EditProfilMobilePage() {
     <SafeAreaView className="flex-1 bg-[#faf8ff]" edges={["top"]}>
       {/* HEADER */}
       <View className="h-16 px-4 flex-row items-center gap-3 bg-[#faf8ff]/95 border-b border-gray-100/60">
-        <TouchableOpacity onPress={() => safeBack(router, "/c/home")} className="w-10 h-10 rounded-full bg-white items-center justify-center border border-gray-100" activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.replace("/c/profil" as any)} className="w-10 h-10 rounded-full bg-white items-center justify-center border border-gray-100" activeOpacity={0.7}>
           <ArrowLeft size={20} color="#131b2e" />
         </TouchableOpacity>
         <Text className="text-[18px] font-bold text-[#131b2e]">Edit Profil</Text>
@@ -205,9 +205,21 @@ export default function EditProfilMobilePage() {
 
             <Field label="Email" value={l.email} onChange={l.setEmail} placeholder="email@example.com" keyboardType="email-address" />
             <Field label="Nomor Telepon" value={l.phone} onChange={l.setPhone} placeholder="08xxxxxxxxxx" keyboardType="phone-pad" />
-            <Field label="Alamat Singkat" value={l.alamatSingkat} onChange={l.setAlamatSingkat} placeholder="Kota/Daerah" />
-            <Field label="Alamat Lengkap" value={l.address} onChange={l.setAddress} placeholder="Jl, No, RT/RW..." multiline rows={3} />
-            <Field label="Keahlian (pisahkan dengan koma)" value={l.keahlian} onChange={l.setKeahlian} placeholder="Cuci AC, Instalasi, Maintenance" multiline rows={2} />
+            <View className="mb-3">
+              <Text className="text-[12px] font-bold text-gray-700 mb-1.5">Kategori Utama Jasa <Text className="text-orange-600 font-extrabold">*</Text></Text>
+              <View className="flex-row flex-wrap gap-1.5">
+                {["Rumah","Antar & Kurir","Service","Kelistrikan","Kebersihan","Digital & IT","Edukasi","Kreatif","Tukang","Otomotif","Lainnya"].map((cat) => {
+                  const active = (l.kategori || "Digital & IT") === cat;
+                  return (
+                    <TouchableOpacity key={cat} onPress={() => l.setKategori(cat)} className={`px-3 py-1.5 rounded-full border ${active ? "bg-[#FF6B00] border-[#FF6B00]" : "bg-white border-gray-200"}`} activeOpacity={0.85}>
+                      <Text className={`text-[11px] font-bold ${active ? "text-white" : "text-gray-700"}`}>{cat}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text className="text-[11px] text-gray-400 mt-1">Pilih satu kategori utama — menentukan katalog tempat profilmu muncul.</Text>
+            </View>
+            <Field label="Keahlian Spesifik (pisahkan koma)" value={l.keahlian} onChange={l.setKeahlian} placeholder="Misal: Service Laptop, Install OS, Web Design" multiline rows={2} />
             <Field label="Profil Singkat" value={l.mitraDescription} onChange={l.setMitraDescription} placeholder="Jelaskan tentang jasa Anda..." multiline rows={3} />
             <Field label="Tarif Layanan Dasar (Rp)" value={l.basePrice} onChange={l.setBasePrice} placeholder="0" keyboardType="number-pad" prefix="Rp" />
           </View>
@@ -503,7 +515,7 @@ export default function EditProfilMobilePage() {
 
       {/* BOTTOM BAR: Batal / Simpan */}
       <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 flex-row gap-3">
-        <TouchableOpacity onPress={() => safeBack(router, "/c/home")} className="flex-1 py-3 rounded-full bg-gray-100 items-center" activeOpacity={0.8}>
+        <TouchableOpacity onPress={() => router.replace("/c/profil" as any)} className="flex-1 py-3 rounded-full bg-gray-100 items-center" activeOpacity={0.8}>
           <Text className="font-bold text-gray-700">Batal</Text>
         </TouchableOpacity>
         <TouchableOpacity

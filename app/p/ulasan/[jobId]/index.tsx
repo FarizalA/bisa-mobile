@@ -190,7 +190,7 @@ export default function MitraReviewPage() {
         try {
           // via API biar RLS poin aman, fallback direct
           const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-          const backendUrl = rawApi || (Platform.OS === "web" ? window.location.origin : "https://bisa-app.vercel.app");
+          const backendUrl = rawApi || (Platform.OS === "web" ? window.location.origin : "https://bisa-admin.vercel.app");
           const r = await fetch(`${backendUrl}/api/orders/review`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

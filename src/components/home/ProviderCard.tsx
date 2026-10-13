@@ -4,6 +4,12 @@ import { Image } from "expo-image";
 import Svg, { Path, Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
+function getThumb(url?: string | null) {
+  if (!url || !url.startsWith("http")) return null;
+  if (url.includes("supabase.co") && !url.includes("?")) return `${url}?width=240&height=240&resize=cover&quality=75`;
+  return url;
+}
+
 export function MitraUnggulanBadgeIcon({ size = 14 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -20,6 +26,7 @@ export interface ProviderItem {
   name: string;
   skill?: string;
   keahlian?: string;
+  kategori?: string | null;
   price?: number;
   base_price?: number;
   rating?: number;
@@ -43,7 +50,7 @@ interface ProviderCardProps {
   onChatPress: () => void;
 }
 
-export default function ProviderCard({
+function ProviderCardComponent({
   item,
   variant = "grid",
   onPress,
@@ -79,8 +86,10 @@ export default function ProviderCard({
               source={item.face_url ? { uri: item.face_url } : require("../../../assets/mascot.png")}
               style={{ width: 40, height: 40, borderRadius: 20 }}
               contentFit="cover"
-              transition={200}
+              transition={100}
               cachePolicy="memory-disk"
+              priority="low"
+              recyclingKey={String(item.id)}
             />
             <View
               className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${isOnline ? "bg-green-500" : "bg-red-500"}`}
@@ -110,8 +119,8 @@ export default function ProviderCard({
           {skillText}
         </Text>
 
-        {/* Footer - plek web bg-slate-50 px-3 py-2 */}
-        <View className="bg-slate-50 px-3 py-2 flex-row items-center justify-between mt-auto">
+        {/* Footer - plek web bg-slate-50 px-3 py-2 + pb 6px */}
+        <View className="bg-slate-50 px-3 pt-2 flex-row items-center justify-between mt-auto" style={{ paddingBottom: 14 }}>
           <View className="flex-1 min-w-0">
             <Text className="text-[9px] text-gray-400 font-medium leading-none">Mulai dari</Text>
             <Text className="text-[13px] font-bold text-orange-600 leading-tight" numberOfLines={1}>
@@ -136,7 +145,7 @@ export default function ProviderCard({
     );
   }
 
-  // Grid - plek web bg-white border-gray-100 rounded-2xl shadow-sm, h-32 bg-gray-200
+  // Grid - Masonry (Dynamic Height)
   return (
     <TouchableOpacity
       onPress={() => {
@@ -144,20 +153,22 @@ export default function ProviderCard({
         onPress();
       }}
       activeOpacity={0.85}
-      className="w-[48%] bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col mb-3"
-      style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 }}
+      className="w-full bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col"
+      style={{ minHeight: 275, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 }}
     >
       <View className="relative h-32 bg-gray-200 w-full overflow-hidden">
         <Image
-          source={item.face_url ? { uri: item.face_url } : require("../../../assets/mascot.png")}
+          source={getThumb(item.face_url) ? { uri: getThumb(item.face_url)! } : require("../../../assets/mascot.png")}
           style={{ width: "100%", height: "100%" }}
           contentFit="cover"
-          transition={250}
+          transition={150}
           cachePolicy="memory-disk"
+          priority="low"
+          recyclingKey={String(item.id)}
         />
       </View>
 
-      <View className="p-3.5 flex flex-col flex-1">
+      <View className="p-3.5 flex flex-col flex-1" style={{ minHeight: 145 }}>
         <Text className="text-[14px] font-bold text-slate-800 leading-tight line-clamp-2 mb-1.5" numberOfLines={2}>
           {skillText}
         </Text>
@@ -205,4 +216,7 @@ export default function ProviderCard({
     </TouchableOpacity>
   );
 }
+
+const ProviderCard = React.memo(ProviderCardComponent);
+export default ProviderCard;
 

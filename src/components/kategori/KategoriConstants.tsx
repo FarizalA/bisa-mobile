@@ -19,14 +19,14 @@ export const CATEGORIES = [
   { id: "Semua", label: "Semua Jasa", icon: LayoutGrid, keywords: [] as string[] },
   { id: "Rumah", label: "Rumah", icon: HomeIcon, keywords: ["rumah", "bangunan", "tukang", "sanitasi", "pipa", "atap", "cat"] },
   { id: "Antar & Kurir", label: "Antar & Kurir", icon: Bike, keywords: ["antar", "kurir", "kirim", "pindahan", "ojek", "logistik"] },
-  { id: "Service AC & Elektronik", label: "Service AC", icon: Snowflake, keywords: ["ac", "elektronik", "freon", "tv", "kulkas", "mesin cuci", "servis"] },
+  { id: "Service", label: "Service", icon: Snowflake, keywords: ["service ac", "service", "ac", "elektronik", "freon", "tv", "kulkas", "mesin cuci", "servis"] },
   { id: "Kelistrikan", label: "Kelistrikan", icon: Zap, keywords: ["listrik", "kabel", "lampu", "konslet", "panel", "saklar"] },
-  { id: "Bersih-bersih", label: "Kebersihan", icon: Sparkles, keywords: ["bersih", "cuci", "pel", "sapu", "setrika", "cleaning", "laundry"] },
+  { id: "Kebersihan", label: "Kebersihan", icon: Sparkles, keywords: ["kebersihan", "bersih", "cuci", "pel", "sapu", "setrika", "cleaning", "laundry"] },
   { id: "Digital & IT", label: "Digital & IT", icon: Laptop, keywords: ["digital", "it", "laptop", "komputer", "web", "desain", "koding", "software"] },
   { id: "Edukasi", label: "Edukasi", icon: GraduationCap, keywords: ["edukasi", "les", "tutor", "mengajar", "kursus", "guru", "privat"] },
   { id: "Kreatif", label: "Kreatif", icon: Palette, keywords: ["kreatif", "foto", "video", "desain", "seni", "editor", "konten"] },
-  { id: "Tukang Kilat", label: "Tukang", icon: Hammer, keywords: ["kilat", "cepat", "darurat", "urgent", "24 jam", "tukang", "bangunan"] },
-  { id: "Otomotif & Bengkel", label: "Otomotif", icon: Car, keywords: ["otomotif", "bengkel", "motor", "mobil", "ban", "oli"] },
+  { id: "Tukang", label: "Tukang", icon: Hammer, keywords: ["tukang", "bangunan", "renovasi", "kayu", "las", "cat", "keramik", "batu"] },
+  { id: "Otomotif", label: "Otomotif", icon: Car, keywords: ["otomotif", "bengkel", "motor", "mobil", "ban", "oli"] },
   { id: "Lainnya", label: "Lainnya", icon: MoreHorizontal, keywords: ["lainnya", "lain"] },
 ] as const;
 

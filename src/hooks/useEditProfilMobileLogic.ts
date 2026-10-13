@@ -57,6 +57,7 @@ export function useEditProfilMobileLogic() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [alamatSingkat, setAlamatSingkat] = useState("");
+  const [kategori, setKategori] = useState("Digital & IT");
   const [keahlian, setKeahlian] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [faceUrl, setFaceUrl] = useState("");
@@ -124,6 +125,7 @@ export function useEditProfilMobileLogic() {
         setEmail(d.email || "");
         setAddress(d.address || "");
         setAlamatSingkat(d.alamat_singkat || "");
+        setKategori((d as any).kategori || "Digital & IT");
         setKeahlian(d.keahlian || "");
         setBasePrice(String(d.base_price ?? 0));
         setFaceUrl(d.face_url || "");
@@ -409,6 +411,7 @@ export function useEditProfilMobileLogic() {
         email,
         address,
         alamat_singkat: alamatSingkat,
+        kategori,
         keahlian,
         base_price: parseFloat(basePrice) || 0,
         face_url: faceUrl,
@@ -420,11 +423,11 @@ export function useEditProfilMobileLogic() {
         char_warranty: charWarranty,
       }).eq("id", user.id);
       if (error) throw error;
-      const updated = { ...user, phone, email, address, alamat_singkat: alamatSingkat, keahlian, base_price: parseFloat(basePrice) || 0, face_url: faceUrl, mitra_description: mitraDescription };
+      const updated = { ...user, phone, email, address, alamat_singkat: alamatSingkat, kategori, keahlian, base_price: parseFloat(basePrice) || 0, face_url: faceUrl, mitra_description: mitraDescription };
       await setStoredUser(updated);
       setUser(updated);
       showPopup({ title: "Berhasil", message: "Profil berhasil disimpan.", type: "success" });
-      setTimeout(() => safeBack(router, "/c/home"), 900);
+      setTimeout(() => router.replace("/c/profil" as any), 900);
     } catch (e: any) {
       showPopup({ title: "Gagal Simpan", message: e.message || "Gagal menyimpan profil.", type: "error" });
     } finally {
@@ -447,6 +450,8 @@ export function useEditProfilMobileLogic() {
     setAddress,
     alamatSingkat,
     setAlamatSingkat,
+    kategori,
+    setKategori,
     keahlian,
     setKeahlian,
     basePrice,

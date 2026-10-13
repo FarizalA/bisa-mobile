@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   ArrowLeft,
   Trophy,
@@ -24,7 +25,6 @@ import {
 import * as Haptics from "expo-haptics";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser } from "../../src/lib/user-storage";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import { safeBack } from "@/lib/navigation";
 
 interface Misi {
@@ -41,6 +41,18 @@ interface Misi {
 
 export default function MisiMitraPage() {
   const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.replace("/p/profil" as any);
+        return true;
+      };
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [router])
+  );
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"daily" | "weekly">("daily");
@@ -179,7 +191,7 @@ export default function MisiMitraPage() {
       {/* Header */}
       <View className="h-16 px-4 flex-row items-center justify-between bg-white border-b border-gray-100">
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={() => safeBack(router, "/p/home")} className="w-9 h-9 rounded-full items-center justify-center">
+          <TouchableOpacity onPress={() => router.replace("/p/profil" as any)} className="w-9 h-9 rounded-full items-center justify-center">
             <ArrowLeft size={22} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-bold text-gray-900">Misi & Hadiah Mitra</Text>
@@ -305,8 +317,6 @@ export default function MisiMitraPage() {
           </View>
         </View>
       </ScrollView>
-
-      <ProviderBottomNav active="profil" />
     </SafeAreaView>
   );
 }

@@ -5,7 +5,6 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, MessageSquare } from "lucide-react-native";
 import { safeBack } from "../../src/lib/navigation";
 import { fetchInboxChats, ChatInboxItem } from "../../src/lib/chatInbox";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import InboxListView from "../../src/components/chat/InboxListView";
 
 export default function ProviderInboxPage() {
@@ -60,8 +59,6 @@ export default function ProviderInboxPage() {
         refreshing={refreshing}
         onRefresh={onRefresh}
       />
-
-      <ProviderBottomNav active="chat" />
     </SafeAreaView>
   );
 }

@@ -9,11 +9,17 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bisa-admin.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bisa-admin.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       }

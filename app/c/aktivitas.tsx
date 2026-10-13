@@ -11,19 +11,26 @@ import {
   TouchableOpacity,
   Pressable,
   Platform,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser } from "../../src/lib/user-storage";
-import BottomNav from "../../src/components/BottomNav";
 import AktivitasHeader from "../../src/components/aktivitas/AktivitasHeader";
 import AktivitasTabNav, { AktivitasTabKey } from "../../src/components/aktivitas/AktivitasTabNav";
 import AktivitasJobCard from "../../src/components/aktivitas/AktivitasJobCard";
 import AktivitasEmptyState from "../../src/components/aktivitas/AktivitasEmptyState";
-import { formatRupiah } from "../../src/lib/payment";
+import {
+  formatRupiah,
+  processOrderRefund,
+  releaseEscrowPayout,
+  requestOrderCancellation,
+  checkAndProcessExpiredCancellations,
+} from "../../src/lib/payment";
 import { AktivitasSkeleton } from "../../src/components/SkeletonLoader";
+import { checkAndSyncMidtransStatus } from "../../src/lib/midtransDirect";
 
 export default function AktivitasPage() {
   const router = useRouter();
@@ -34,7 +41,7 @@ export default function AktivitasPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<AktivitasTabKey>("semua");
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   // Action Loading States
   const [payingJobId, setPayingJobId] = useState<number | null>(null);
@@ -42,6 +49,14 @@ export default function AktivitasPage() {
 
   // Custom confirm modal 1:1 web (ganti window.confirm jelek)
   const [confirmSheet, setConfirmSheet] = useState<null | { title: string; message: string; confirmText: string; cancelText: string; onConfirm: () => void; danger?: boolean }>(null);
+
+  // Modal Pengajuan Pembatalan oleh Klien (Mitra diberi 24 jam)
+  const [cancelModal, setCancelModal] = useState<{ visible: boolean; job: any; reason: string; loading: boolean }>({
+    visible: false,
+    job: null,
+    reason: "",
+    loading: false,
+  });
 
   // Rating diproses di halaman c/ulasan/[id] (Image 2) — popup Image 1 sudah dihapus
 
@@ -111,6 +126,11 @@ export default function AktivitasPage() {
   const fetchMyJobs = useCallback(async (userId: string, limitCount = 30) => {
     if (!userId) return;
     try {
+      // Auto-refund pembatalan yang telah melewati 24 jam tanpa respon mitra
+      try {
+        await checkAndProcessExpiredCancellations();
+      } catch (e) {}
+
       // Panggil RPC auto expire jika ada di backend (Gap 1 fix)
       try {
         await supabase.rpc("expire_overdue_jobs");
@@ -129,14 +149,10 @@ export default function AktivitasPage() {
         const now = Date.now();
         const processedJobs = await Promise.all(
           data.map(async (job) => {
-            // Auto-check sync ke backend / Midtrans untuk localhost sandbox
+            // Auto-check sync langsung ke Midtrans API (tidak bergantung server Vercel)
             if (job.status === "menunggu_pembayaran" && (job.payment_token || job.payment_url)) {
               try {
-                const isWeb = Platform.OS === "web";
-                const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-                const backendUrl = rawApi || (!isWeb ? "https://bisa-app.vercel.app" : "http://localhost:3000");
-                const res = await fetch(`${backendUrl}/api/payment/sync?jobId=${job.id}`);
-                const syncData = await res.json();
+                const syncData = await checkAndSyncMidtransStatus(job.id, job.payment_token);
                 if (syncData.isPaid) {
                   return { ...job, status: "sedang_dikerjakan", payment_status: "escrow_held" };
                 }
@@ -210,13 +226,23 @@ export default function AktivitasPage() {
     };
   }, [fetchMyJobs, pageLimit, router]);
 
+  useFocusEffect(
+    useCallback(() => {
+      checkAndProcessExpiredCancellations().catch(() => {});
+      if (user?.id) {
+        fetchMyJobs(user.id, pageLimit);
+      }
+    }, [user?.id, pageLimit, fetchMyJobs])
+  );
+
   const onRefresh = () => {
     setRefreshing(true);
+    checkAndProcessExpiredCancellations().catch(() => {});
     if (user?.id) fetchMyJobs(user.id, pageLimit);
   };
 
   // 4. Action Handlers
-  // A. Pembayaran — Panggil Midtrans Snap (1:1 Web)
+  // A. Pembayaran — Panggil Midtrans Snap (1:1 Web + Mobile Direct Fallback)
   const handlePayNow = async (job: any) => {
     const rawAgreed = job.agreed_price || parseInt(String(job.budget || "").replace(/\D/g, "") || "0", 10);
     if (!rawAgreed || rawAgreed <= 0) {
@@ -227,28 +253,52 @@ export default function AktivitasPage() {
     setPayingJobId(job.id);
     try {
       const isWeb = Platform.OS === "web";
-      const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-      const backendUrl = rawApi || (!isWeb ? "https://bisa-app.vercel.app" : "http://localhost:3000");
-      const url = `${backendUrl}/api/payment/snap`;
+      let paymentUrl: string | undefined;
+      let snapToken: string | undefined;
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // 1. Coba backend Vercel dulu
+      try {
+        const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
+        const backendUrl = rawApi || "https://bisa-admin.vercel.app";
+        const url = `${backendUrl}/api/payment/snap`;
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: Number(job.id),
+            agreedPrice: rawAgreed,
+            customerName: user?.name || "Pelanggan BISA",
+            customerEmail: user?.email || "buyer@bisa.app",
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          paymentUrl = data.paymentUrl || data.redirect_url;
+          snapToken = data.snapToken || data.token;
+        }
+      } catch (beErr) {
+        console.warn("Backend Vercel error, fallback ke Direct Midtrans:", beErr);
+      }
+
+      // 2. Jika backend 404 / gagal, gunakan Direct Midtrans Snap API resmi
+      if (!paymentUrl && !snapToken) {
+        const { createMidtransSnapTransaction } = await import("../../src/lib/midtransDirect");
+        const directRes = await createMidtransSnapTransaction({
           jobId: Number(job.id),
           agreedPrice: rawAgreed,
           customerName: user?.name || "Pelanggan BISA",
           customerEmail: user?.email || "buyer@bisa.app",
-        }),
-      });
+        });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || (!data.snapToken && !data.paymentUrl)) {
-        throw new Error(data.error || data.message || "Gagal membuat transaksi Midtrans");
+        if (!directRes.success || (!directRes.paymentUrl && !directRes.snapToken)) {
+          throw new Error(directRes.message || "Gagal membuat transaksi Midtrans.");
+        }
+
+        paymentUrl = directRes.paymentUrl;
+        snapToken = directRes.snapToken;
       }
-
-      const paymentUrl: string | undefined = data.paymentUrl || data.redirect_url;
-      const snapToken: string | undefined = data.snapToken || data.token;
 
       const targetUrl = paymentUrl || (snapToken ? `https://app.sandbox.midtrans.com/snap/v2/vtweb/${snapToken}` : undefined);
 
@@ -306,7 +356,7 @@ export default function AktivitasPage() {
         try {
           const isWeb = Platform.OS === "web";
           const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-          const backendUrl = rawApi || (!isWeb ? "https://bisa-app.vercel.app" : "http://localhost:3000");
+          const backendUrl = rawApi || (!isWeb ? "https://bisa-admin.vercel.app" : "http://localhost:3000");
 
           const res = await fetch(`${backendUrl}/api/orders/complete`, {
             method: "POST",
@@ -316,15 +366,8 @@ export default function AktivitasPage() {
 
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            // Fallback direct update jika API backend offline
-            const { error: fbErr } = await supabase
-              .from("pekerjaan_bisa")
-              .update({
-                status: "selesai",
-                payment_status: isEscrow ? "released" : job.payment_status,
-              })
-              .eq("id", job.id);
-            if (fbErr) throw new Error(data.error || fbErr.message);
+            // Fallback rilis escrow langsung jika API backend offline
+            await releaseEscrowPayout(job.id);
           }
 
           setJobs((prev) =>
@@ -333,7 +376,7 @@ export default function AktivitasPage() {
                 ? {
                     ...j,
                     status: "selesai",
-                    payment_status: data.isCOD ? "cod_completed" : "released",
+                    payment_status: data.isCOD || job.payment_method === "COD" ? "cod_completed" : "released",
                     platform_fee: data.platform_fee ?? j.platform_fee,
                     mitra_earnings: data.mitra_earnings ?? j.mitra_earnings,
                   }
@@ -343,7 +386,7 @@ export default function AktivitasPage() {
 
           setConfirmSheet({
             title: "Berhasil",
-            message: data.isCOD
+            message: data.isCOD || job.payment_method === "COD"
               ? "Pesanan COD selesai — tunai di tempat. Mengarahkan ke formulir ulasan…"
               : `Pekerjaan selesai & dana dirilis ke Mitra! Mengarahkan ke ulasan…`,
             confirmText: "Beri Ulasan",
@@ -373,19 +416,20 @@ export default function AktivitasPage() {
       onConfirm: async () => {
         setConfirmSheet(null);
         try {
-          const { error } = await supabase
-            .from("pekerjaan_bisa")
-            .update({ status: "dibatalkan" })
-            .eq("id", jobId);
-
-          if (error) {
-            Alert.alert("Gagal Batalkan", error.message || "Gagal memperbarui status di database.");
-            return;
-          }
-
+          const res = await processOrderRefund(jobId, "Dibatalkan oleh Klien");
           setJobs((prev) =>
-            prev.map((j) => (j.id === jobId ? { ...j, status: "dibatalkan" } : j))
+            prev.map((j) =>
+              j.id === jobId ? { ...j, status: "dibatalkan", payment_status: res.refunded ? "refunded" : "cancelled" } : j
+            )
           );
+          if (res.refunded) {
+            Alert.alert(
+              "Sukses",
+              `Pesanan dibatalkan. Dana sebesar Rp ${res.amount.toLocaleString("id-ID")} telah dikembalikan ke saldo Dompet Anda dan dapat ditarik.`
+            );
+          } else {
+            Alert.alert("Sukses", "Pesanan telah dibatalkan.");
+          }
         } catch (e: any) {
           Alert.alert("Error", e.message || "Gagal membatalkan pesanan.");
         }
@@ -393,31 +437,32 @@ export default function AktivitasPage() {
     });
   };
 
-  // D.2 Batal Sepakat (Mutual Cancel) saat sedang dikerjakan
+  // D.2 Batal Sepakat / Pengajuan Pembatalan saat sedang dikerjakan (Mitra harus menyetujui, max 24 jam)
   const handleMutualCancel = (job: any) => {
-    setConfirmSheet({
-      title: "Batal Sepakat (Refund)",
-      message: `Ajukan pembatalan bersama untuk pesanan "${job.judul}"? Dana Rekber akan dikembalikan ke Anda setelah disetujui.`,
-      confirmText: "Ya, Batalkan",
-      cancelText: "Kembali",
-      danger: true,
-      onConfirm: async () => {
-        setConfirmSheet(null);
-        try {
-          const updatePayload: any = {
-            status: "dibatalkan",
-            payment_status: job.payment_method === "MIDTRANS" ? "refunded" : "cod_cancelled",
-          };
-          const { error } = await supabase.from("pekerjaan_bisa").update(updatePayload).eq("id", job.id);
-          if (error) throw error;
-
-          if (user?.id) fetchMyJobs(user.id, pageLimit);
-          Alert.alert("Sukses", "Pesanan dibatalkan bersama. Dana Rekber telah dikembalikan.");
-        } catch (e: any) {
-          Alert.alert("Gagal", e.message || "Gagal membatalkan pesanan.");
-        }
-      },
+    setCancelModal({
+      visible: true,
+      job,
+      reason: "",
+      loading: false,
     });
+  };
+
+  const handleSubmitCancelRequest = async () => {
+    if (!cancelModal.job) return;
+    setCancelModal((p) => ({ ...p, loading: true }));
+    try {
+      const reasonText = cancelModal.reason.trim() || "Klien mengajukan pembatalan pesanan";
+      await requestOrderCancellation(cancelModal.job.id, reasonText);
+      setCancelModal({ visible: false, job: null, reason: "", loading: false });
+      Alert.alert(
+        "Pengajuan Pembatalan Dikirim",
+        "Pengajuan telah dikirim ke Mitra. Mitra memiliki waktu 24 jam untuk merespon. Jika Mitra tidak merespon dalam 24 jam, dana otomatis dikembalikan ke saldo dompet Anda."
+      );
+      if (user?.id) fetchMyJobs(user.id, pageLimit);
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message || "Gagal mengajukan pembatalan.");
+      setCancelModal((p) => ({ ...p, loading: false }));
+    }
   };
 
   // E. Perpanjang Waktu Posting 24 Jam — custom modal
@@ -452,9 +497,12 @@ export default function AktivitasPage() {
         return jobs.filter((j) => j.status === "menunggu_pembayaran");
       case "berjalan":
         return jobs.filter((j) =>
-          ["mitra_ditemukan", "sedang_dikerjakan", "menunggu_konfirmasi_selesai"].includes(
-            j.status
-          )
+          [
+            "mitra_ditemukan",
+            "sedang_dikerjakan",
+            "menunggu_konfirmasi_selesai",
+            "menunggu_persetujuan_batal",
+          ].includes(j.status)
         );
       case "selesai":
         return jobs.filter((j) => j.status === "selesai");
@@ -470,9 +518,12 @@ export default function AktivitasPage() {
     return {
       belum_bayar: jobs.filter((j) => j.status === "menunggu_pembayaran").length,
       berjalan: jobs.filter((j) =>
-        ["mitra_ditemukan", "sedang_dikerjakan", "menunggu_konfirmasi_selesai"].includes(
-          j.status
-        )
+        [
+          "mitra_ditemukan",
+          "sedang_dikerjakan",
+          "menunggu_konfirmasi_selesai",
+          "menunggu_persetujuan_batal",
+        ].includes(j.status)
       ).length,
       selesai: jobs.filter((j) => j.status === "selesai").length,
       dibatalkan: jobs.filter(
@@ -580,8 +631,78 @@ export default function AktivitasPage() {
         </Pressable>
       </Modal>
 
-      {/* 6. Bottom Navigation */}
-      <BottomNav active="aktivitas" />
+      {/* 6. Modal Pengajuan Pembatalan Klien (Mitra diberi 24 Jam) */}
+      <Modal
+        visible={cancelModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!cancelModal.loading) setCancelModal((p) => ({ ...p, visible: false }));
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", paddingHorizontal: 20 }}>
+          <View style={{ backgroundColor: "#ffffff", borderRadius: 24, padding: 20, width: "100%", maxWidth: 360, gap: 14, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 16, elevation: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: "#111827" }}>Ajukan Pembatalan</Text>
+              <TouchableOpacity
+                onPress={() => setCancelModal((p) => ({ ...p, visible: false }))}
+                disabled={cancelModal.loading}
+                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "bold", color: "#6b7280" }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, color: "#4b5563", lineHeight: 18 }}>
+              Pekerjaan sedang berlangsung. Pengajuan pembatalan akan dikirimkan ke Mitra. Mitra memiliki waktu <Text style={{ fontWeight: "bold", color: "#b45309" }}>24 jam</Text> untuk merespon. Jika Mitra tidak merespon dalam 24 jam, dana otomatis di-refund ke saldo dompet Anda.
+            </Text>
+
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: "#374151" }}>Alasan Pembatalan (Opsional):</Text>
+              <TextInput
+                value={cancelModal.reason}
+                onChangeText={(text) => setCancelModal((p) => ({ ...p, reason: text }))}
+                placeholder="Contoh: Mitra belum mulai / ada perubahan rencana..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={3}
+                style={{
+                  backgroundColor: "#f9fafb",
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  borderRadius: 12,
+                  padding: 10,
+                  fontSize: 12,
+                  color: "#111827",
+                  minHeight: 70,
+                  textAlignVertical: "top",
+                }}
+              />
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+              <TouchableOpacity
+                onPress={() => setCancelModal((p) => ({ ...p, visible: false }))}
+                disabled={cancelModal.loading}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 999, borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#4b5563" }}>Kembali</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSubmitCancelRequest}
+                disabled={cancelModal.loading}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 999, backgroundColor: "#dc2626", alignItems: "center", justifyContent: "center" }}
+              >
+                {cancelModal.loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ fontSize: 12, fontWeight: "900", color: "#ffffff" }}>Kirim Pengajuan</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

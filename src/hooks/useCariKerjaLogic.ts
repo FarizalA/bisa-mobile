@@ -42,7 +42,7 @@ export function useCariKerjaLogic() {
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   const [isApplying, setIsApplying] = useState(false);
   const [applyHarga, setApplyHarga] = useState("");

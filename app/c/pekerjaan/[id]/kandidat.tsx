@@ -15,7 +15,7 @@ export default function KandidatMobilePage() {
   const [job, setJob] = useState<any>(null);
   const [kandidatList, setKandidatList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [actingId, setActingId] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<null | { title: string; message: string; confirmText: string; cancelText: string; onConfirm: () => void; danger?: boolean }>(null);
 

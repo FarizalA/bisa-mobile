@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { View, ScrollView, RefreshControl } from "react-native";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { View, RefreshControl, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser } from "../../src/lib/user-storage";
-import BottomNav from "../../src/components/BottomNav";
-import { CATEGORIES, calculateDistance } from "../../src/components/kategori/KategoriConstants";
+import { CATEGORIES, calculateDistance, PersonSearchIcon } from "../../src/components/kategori/KategoriConstants";
 import KategoriHeader from "../../src/components/kategori/KategoriHeader";
 import { CategoryPills, SortFilterBar } from "../../src/components/kategori/KategoriFilters";
-import { KategoriPromoBanner, KategoriListState } from "../../src/components/kategori/KategoriListState";
+import { KategoriPromoBanner } from "../../src/components/kategori/KategoriListState";
+import KategoriProviderCard from "../../src/components/kategori/KategoriProviderCard";
+import * as Haptics from "expo-haptics";
+import { FlashList } from "@shopify/flash-list";
 
 export default function KategoriPage() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ q?: string }>();
   const initialCat = params.q || "Semua Jasa";
 
@@ -50,7 +53,7 @@ export default function KategoriPage() {
       const storedUser: any = await getStoredUser();
       let query = supabase
         .from("users_bisa")
-        .select("id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until")
+        .select("id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, kategori, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until")
         .eq("kyc_status", "Terverifikasi")
         .neq("kyc_status", "Dibekukan");
 
@@ -94,20 +97,35 @@ export default function KategoriPage() {
       );
 
       result = result.filter((prov) => {
+        const sel = selectedCategory.toLowerCase().trim();
+        const selLabel = (catObj?.label || "").toLowerCase().trim();
+        const selId = (catObj?.id || "").toLowerCase().trim();
+        const kat = (prov.kategori || "").toLowerCase().trim();
+        const aliases: Record<string, string[]> = {
+          service: ["service", "service ac", "service ac & elektronik"],
+          kebersihan: ["kebersihan", "bersih-bersih"],
+          otomotif: ["otomotif", "otomotif & bengkel"],
+          tukang: ["tukang", "tukang kilat"],
+        };
+        if (kat) {
+          const a = aliases[sel] || [];
+          if (kat === sel || kat === selLabel || kat === selId || a.includes(kat)) return true;
+          const rev = Object.entries(aliases).find(([_, v]) => v.includes(kat))?.[0];
+          if (rev && rev === sel) return true;
+          return false;
+        }
+        // 2. Fallback data lama tanpa kategori — whole-word untuk keyword pendek
         const keahlian = (prov.keahlian || "").toLowerCase();
-        const bio = (prov.keahlian_detail || "").toLowerCase();
+        const bio = (prov.keahlian_detail || prov.bio || "").toLowerCase();
         const nama = (prov.name || "").toLowerCase();
-
-        if (keahlian.includes(selectedCategory.toLowerCase())) return true;
-        if (bio.includes(selectedCategory.toLowerCase())) return true;
-
+        if (keahlian.includes(sel) || bio.includes(sel)) return true;
         if (catObj && catObj.keywords.length > 0) {
-          return catObj.keywords.some(
-            (kw) =>
-              keahlian.includes(kw.toLowerCase()) ||
-              bio.includes(kw.toLowerCase()) ||
-              nama.includes(kw.toLowerCase())
-          );
+          const isWord = (text: string, kw: string) => {
+            const k = kw.toLowerCase().trim();
+            if (k.length <= 3) return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+            return text.includes(k);
+          };
+          return catObj.keywords.some((kw) => isWord(keahlian, kw) || isWord(bio, kw) || isWord(nama, kw));
         }
         return false;
       });
@@ -166,6 +184,15 @@ export default function KategoriPage() {
     setOnlyAvailable(false);
   };
 
+  // FlashList: renderItem + keyExtractor dimemo agar recycling tidak trigger re-render liar
+  const renderItem = useCallback(({ item }: { item: any }) => (
+    <View className="mb-3.5 max-w-[440px] w-full self-center">
+      <KategoriProviderCard prov={item} />
+    </View>
+  ), []);
+
+  const keyExtractor = useCallback((item: any) => `kat-${item.id}`, []);
+
   return (
     <SafeAreaView className="flex-1 bg-[#FAFAFA]">
       <KategoriHeader
@@ -189,27 +216,53 @@ export default function KategoriPage() {
         hasLocation={Boolean(userLocation)}
       />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 28 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ff6b00"]} />}
-      >
-        <View className="px-4 pt-3 max-w-[440px] w-full self-center">
-          <KategoriPromoBanner />
-
-          <KategoriListState
-            loading={loading}
-            refreshing={refreshing}
-            providers={filteredProviders}
-            searchQuery={searchQuery}
-            selectedCategory={selectedCategory}
-            resetFilters={resetFilters}
-          />
-        </View>
-      </ScrollView>
-
-      <BottomNav active="home" />
+      {/* Shopify FlashList v2: auto-measure layout */}
+      <View style={{ flex: 1 }}>
+        <FlashList
+          data={filteredProviders}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 28, paddingHorizontal: 16, paddingTop: 12 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ff6b00"]} />}
+          ListHeaderComponent={
+            <View className="mb-3 max-w-[440px] w-full self-center">
+              <KategoriPromoBanner />
+              {loading && !refreshing && <ActivityIndicator color="#ff6b00" className="py-8" />}
+            </View>
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View className="mt-4 bg-white rounded-3xl border border-slate-100 p-8 items-center justify-center shadow-sm max-w-[440px] w-full self-center">
+                <View className="w-16 h-16 rounded-2xl bg-orange-50 items-center justify-center mb-3.5 border border-orange-100/50">
+                  <PersonSearchIcon size={32} color="#ea580c" />
+                </View>
+                <Text className="text-base font-black text-slate-900 text-center">Tidak ada mitra ditemukan</Text>
+                <Text className="text-xs text-slate-400 text-center mt-1.5 max-w-[260px] leading-relaxed">
+                  {searchQuery ? `Tidak ada hasil untuk "${searchQuery}". Coba kata kunci lain.` : "Belum ada mitra terverifikasi untuk kategori ini di lokasimu."}
+                </Text>
+                <View className="flex-row items-center gap-3 mt-6">
+                  {(searchQuery || selectedCategory !== "Semua Jasa") ? (
+                    <TouchableOpacity onPress={resetFilters} activeOpacity={0.8} className="px-4 py-2.5 rounded-full bg-slate-100">
+                      <Text className="text-xs font-bold text-slate-700">Reset Filter</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push("/c/posting" as any);
+                    }}
+                    activeOpacity={0.9}
+                    className="px-5 py-2.5 rounded-full bg-[#ea580c] shadow-md shadow-orange-500/20"
+                  >
+                    <Text className="text-xs font-bold text-white">Posting Kebutuhan</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null
+          }
+        />
+      </View>
     </SafeAreaView>
   );
 }

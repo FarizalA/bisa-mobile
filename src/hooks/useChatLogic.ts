@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Alert, Platform, Linking } from "react-native";
+import { Alert, Platform, Linking, AppState } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
@@ -9,7 +9,13 @@ import { getStoredUser } from "../lib/user-storage";
 import { containsPhoneNumber } from "../lib/chatSecurity";
 import { parseOrderContent } from "../lib/chatHelpers";
 import { usePopup } from "../components/PopupProvider.native";
-import { compressImage } from "../lib/imageCompression";
+import { compressImage, compressImageWithBase64, base64ToUint8Array } from "../lib/imageCompression";
+import { checkAndSyncMidtransStatus } from "../lib/midtransDirect";
+import {
+  processOrderRefund,
+  releaseEscrowPayout,
+  respondOrderCancellation,
+} from "../lib/payment";
 
 // Re-export helpers for convenience
 export { formatBudget, parseOrderContent } from "../lib/chatHelpers";
@@ -41,8 +47,8 @@ export interface Conversation {
 // ───────────────────────────────────────────────
 export function useChatLogic(conversationId: string) {
   const router = useRouter();
-  let showPopup: any = () => {};
-  try { showPopup = usePopup().showPopup; } catch {}
+  const popupContext = usePopup();
+  const showPopup = popupContext?.showPopup || (() => {});
 
   // Core
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -77,6 +83,7 @@ export function useChatLogic(conversationId: string) {
   const [deliveryLink, setDeliveryLink] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [deliveryFileUrl, setDeliveryFileUrl] = useState("");
+  const [deliveryPreviewUri, setDeliveryPreviewUri] = useState("");
   const [sendingDelivery, setSendingDelivery] = useState(false);
   const [revisionJobId, setRevisionJobId] = useState("");
   const [revisionNote, setRevisionNote] = useState("");
@@ -87,6 +94,7 @@ export function useChatLogic(conversationId: string) {
 
   // Status sync
   const [jobStatusMap, setJobStatusMap] = useState<Record<string, string>>({});
+  const [jobPaymentMethodMap, setJobPaymentMethodMap] = useState<Record<string, string>>({});
   const [jobInfo, setJobInfo] = useState<any>(null);
   const [showJobBanner, setShowJobBanner] = useState(true);
 
@@ -130,11 +138,32 @@ export function useChatLogic(conversationId: string) {
           if (m.content?.startsWith("[DELIVERY]:")) { const id = m.content.slice(11).split("|")[0]; if (id) jobIds.add(id); }
         });
         if (jobIds.size) {
-          const { data: jobs } = await supabase.from("pekerjaan_bisa").select("id, status").in("id", Array.from(jobIds));
+          const { data: jobs } = await supabase.from("pekerjaan_bisa").select("id, status, payment_token, payment_status, payment_method").in("id", Array.from(jobIds));
           if (jobs) {
             const map: Record<string, string> = {};
-            jobs.forEach((j: any) => (map[String(j.id)] = j.status));
-            setJobStatusMap(p => ({ ...p, ...map }));
+            const pmMap: Record<string, string> = {};
+            jobs.forEach((j: any) => {
+              map[String(j.id)] = j.status;
+              if (j.payment_method) {
+                pmMap[String(j.id)] = j.payment_method;
+              }
+              // Auto-sync ke Midtrans jika ada pesanan yang masih 'menunggu_pembayaran'
+              if (j.status === "menunggu_pembayaran" || j.payment_status === "belum_bayar") {
+                checkAndSyncMidtransStatus(Number(j.id), j.payment_token).then((res) => {
+                  if (res.isPaid) {
+                    setJobStatusMap((prev) => ({ ...prev, [String(j.id)]: "sedang_dikerjakan" }));
+                    setJobPaymentMethodMap((prev) => ({ ...prev, [String(j.id)]: j.payment_method || "MIDTRANS" }));
+                    setJobInfo((prev: any) =>
+                      prev && String(prev.id) === String(j.id)
+                        ? { ...prev, status: "sedang_dikerjakan", payment_status: "escrow_held" }
+                        : prev
+                    );
+                  }
+                });
+              }
+            });
+            setJobStatusMap((p) => ({ ...p, ...map }));
+            setJobPaymentMethodMap((p) => ({ ...p, ...pmMap }));
           }
         }
       }
@@ -142,14 +171,40 @@ export function useChatLogic(conversationId: string) {
       if (targetJobId) {
         const { data: info } = await supabase
           .from("pekerjaan_bisa")
-          .select("id, judul, deskripsi, budget, status, payment_method, payment_status, kategori, agreed_price, created_at, pelanggan_id, mitra_id")
+          .select("id, judul, deskripsi, budget, status, payment_method, payment_status, payment_token, kategori, agreed_price, created_at, pelanggan_id, mitra_id")
           .eq("id", targetJobId)
           .maybeSingle();
-        if (info) setJobInfo(info);
+        if (info) {
+          setJobInfo(info);
+          if (info.status === "menunggu_pembayaran" || info.payment_status === "belum_bayar") {
+            checkAndSyncMidtransStatus(Number(info.id), (info as any).payment_token).then((res) => {
+              if (res.isPaid) {
+                setJobInfo((prev: any) =>
+                  prev ? { ...prev, status: "sedang_dikerjakan", payment_status: "escrow_held" } : prev
+                );
+                setJobStatusMap((prev) => ({ ...prev, [String(info.id)]: "sedang_dikerjakan" }));
+              }
+            });
+          }
+        }
       }
-    } catch (e: any) { console.error("Load chat error", e); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      console.error("Load chat error", e);
+      setConversation(null);
+      setOtherUser(null);
+      setMessages([]);
+    } finally { setLoading(false); }
   }, [conversationId, router]);
+
+  // Auto-sync saat kembali ke aplikasi dari halaman pembayaran browser Midtrans
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        fetchAll();
+      }
+    });
+    return () => sub.remove();
+  }, [fetchAll]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -169,6 +224,9 @@ export function useChatLogic(conversationId: string) {
         const upd = payload.new as any;
         if (upd) {
           setJobStatusMap((p: Record<string, string>) => ({ ...p, [String(upd.id)]: upd.status }));
+          if (upd.payment_method) {
+            setJobPaymentMethodMap((p: Record<string, string>) => ({ ...p, [String(upd.id)]: upd.payment_method }));
+          }
           setJobInfo((prev: any) => prev && String(prev.id) === String(upd.id) ? { ...prev, ...upd } : prev);
         }
       })
@@ -303,6 +361,30 @@ export function useChatLogic(conversationId: string) {
     if (!found) return;
     await supabase.from("messages").update({ content: `[OFFER]:${amount}:${action}` }).eq("id", found.id);
     await updateLastMessage(action === "accepted" ? "✅ Penawaran diterima" : "❌ Penawaran ditolak");
+
+    if (action === "accepted") {
+      const numAmount = Number(amount);
+      const targetJobId = jobInfo?.id || conversation?.job_id;
+      if (targetJobId && numAmount > 0) {
+        try {
+          await supabase
+            .from("pekerjaan_bisa")
+            .update({
+              agreed_price: numAmount,
+              budget: `Rp ${numAmount.toLocaleString("id-ID")}`,
+            })
+            .eq("id", Number(targetJobId));
+
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(targetJobId)
+              ? { ...prev, agreed_price: numAmount, budget: `Rp ${numAmount.toLocaleString("id-ID")}` }
+              : prev
+          );
+        } catch (jErr) {
+          console.warn("Gagal update agreed_price dari penawaran:", jErr);
+        }
+      }
+    }
   };
 
   const createInvoice = async (judul: string, harga: number) => {
@@ -362,40 +444,62 @@ export function useChatLogic(conversationId: string) {
     setShowPaySheet(false);
     try {
       const isWeb = Platform.OS === "web";
-      const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
-      const backendUrl = rawApi || (!isWeb ? "https://bisa-app.vercel.app" : "http://localhost:3000");
-      const url = `${backendUrl}/api/payment/snap`;
-      const stored: any = await getStoredUser().catch(() => null);
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let paymentUrl: string | undefined;
+      let snapToken: string | undefined;
+      // 1. Coba backend Vercel dulu
+      try {
+        const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
+        const backendUrl = rawApi || "https://bisa-admin.vercel.app";
+        const url = `${backendUrl}/api/payment/snap`;
+        const stored: any = await getStoredUser().catch(() => null);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: Number(payJobId),
+            agreedPrice: priceNum,
+            customerName: stored?.name || myUserName || "Pelanggan BISA",
+            customerEmail: stored?.email || "buyer@bisa.app",
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          paymentUrl = data.paymentUrl || data.redirect_url;
+          snapToken = data.snapToken || data.token;
+        } else {
+          const dbg = await res.json().catch(() => ({}));
+          console.warn("[chat] backend snap failed", res.status, dbg);
+        }
+      } catch (beErr) {
+        console.warn("[chat] backend Vercel error, fallback direct Midtrans:", beErr);
+      }
+      // 2. Fallback Direct Midtrans resmi (sama seperti c/aktivitas yang udah aman)
+      if (!paymentUrl && !snapToken) {
+        const { createMidtransSnapTransaction } = await import("../lib/midtransDirect");
+        const stored2: any = await getStoredUser().catch(() => null);
+        const directRes = await createMidtransSnapTransaction({
           jobId: Number(payJobId),
           agreedPrice: priceNum,
-          customerName: stored?.name || myUserName || "Pelanggan BISA",
-          customerEmail: stored?.email || "buyer@bisa.app",
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || (!data.snapToken && !data.paymentUrl)) throw new Error(data.error || data.message || "Gagal membuat transaksi Midtrans");
-      const paymentUrl: string | undefined = data.paymentUrl || data.redirect_url;
-      const snapToken: string | undefined = data.snapToken || data.token;
-      // Mobile native / web: buka URL pembayaran resmi Midtrans
-      if (paymentUrl) {
-        await Linking.openURL(paymentUrl);
-        try { showPopup({ title: "Menunggu Pembayaran", message: "Selesaikan pembayaran di halaman Midtrans. Status akan otomatis diperbarui via webhook.", type: "info" }); } catch {}
-      } else if (snapToken && isWeb && typeof window !== "undefined" && (window as any).snap) {
+          customerName: stored2?.name || myUserName || "Pelanggan BISA",
+          customerEmail: stored2?.email || "buyer@bisa.app",
+        });
+        if (!directRes.success || (!directRes.paymentUrl && !directRes.snapToken)) {
+          throw new Error(directRes.message || "Gagal membuat transaksi Midtrans.");
+        }
+        paymentUrl = directRes.paymentUrl;
+        snapToken = directRes.snapToken;
+      }
+      const targetUrl = paymentUrl || (snapToken ? `https://app.sandbox.midtrans.com/snap/v2/vtweb/${snapToken}` : undefined);
+      if (!targetUrl) throw new Error("Link pembayaran tidak tersedia. Coba lagi.");
+      if (isWeb && typeof window !== "undefined" && (window as any).snap && snapToken && !paymentUrl) {
         (window as any).snap.pay(snapToken, {
           onSuccess: () => { try { showPopup({ title: "Pembayaran Diproses", message: "Verifikasi webhook…", type: "success" }); } catch {} fetchAll(); },
           onPending: () => { try { showPopup({ title: "Menunggu", message: "Selesaikan pembayaran di metode yang dipilih.", type: "info" }); } catch {} },
           onError: () => { try { showPopup({ title: "Gagal", message: "Transaksi tidak berhasil.", type: "error" }); } catch {} },
         });
-      } else if (snapToken) {
-        // Fallback kalau hanya token tanpa paymentUrl (mis. sandbox): arahkan ke Snap hosted page via token
-        const fallbackUrl = `https://app.sandbox.midtrans.com/snap/v2/vtweb/${snapToken}`;
-        await Linking.openURL(fallbackUrl);
       } else {
-        throw new Error("Link pembayaran tidak tersedia. Coba lagi.");
+        await Linking.openURL(targetUrl);
+        try { showPopup({ title: "Menunggu Pembayaran", message: "Selesaikan pembayaran di halaman Midtrans. Status akan otomatis diperbarui via webhook.", type: "info" }); } catch {}
       }
       // Jangan langsung fetchAll — webhook Midtrans akan ubah status ke escrow_held / sedang_dikerjakan secara realtime
     } catch (e: any) {
@@ -434,112 +538,232 @@ export function useChatLogic(conversationId: string) {
     } else if (action === "revision") {
       setRevisionJobId(jobId);
       setShowRevisionModal(true);
+    } else if (action === "check_payment") {
+      try {
+        const numJobId = Number(jobId);
+        const res = await checkAndSyncMidtransStatus(numJobId);
+        if (res.isPaid) {
+          setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "sedang_dikerjakan" }));
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(numJobId)
+              ? { ...prev, status: "sedang_dikerjakan", payment_status: "escrow_held" }
+              : prev
+          );
+          await fetchAll();
+          try {
+            showPopup({
+              title: "Pembayaran Terverifikasi! 🎉",
+              message: "Dana disimpan aman di Escrow. Pengerjaan dapat dilanjutkan.",
+              type: "success",
+            });
+          } catch {}
+        } else {
+          try {
+            showPopup({
+              title: "Status Pembayaran",
+              message: "Pembayaran belum terdeteksi selesai dari Midtrans. Mohon selesaikan pembayaran terlebih dahulu.",
+              type: "info",
+            });
+          } catch {}
+        }
+      } catch (e: any) {
+        try { showPopup({ title: "Gagal Cek Status", message: e.message || "Terjadi kesalahan", type: "error" }); } catch {}
+      }
+      return;
+    } else if (action === "mitra_accept") {
+      try {
+        const numJobId = Number(jobId);
+        const { data: job, error: fetchErr } = await supabase
+          .from("pekerjaan_bisa")
+          .select("id, status, payment_status, payment_method, pelanggan_id, mitra_id, judul")
+          .eq("id", numJobId)
+          .maybeSingle();
+
+        if (fetchErr || !job) {
+          try { showPopup({ title: "Error", message: "Pesanan tidak ditemukan.", type: "error" }); } catch {}
+          return;
+        }
+
+        const isMitraMe = Number(job.mitra_id) === Number(myUserId);
+        if (!isMitraMe) {
+          try { showPopup({ title: "Akses Ditolak", message: "Hanya Mitra yang ditugaskan yang dapat menyetujui pesanan ini.", type: "error" }); } catch {}
+          return;
+        }
+
+        const nextStatus = job.payment_status === "belum_bayar" ? "menunggu_pembayaran" : "sedang_dikerjakan";
+        const { error: updErr } = await supabase
+          .from("pekerjaan_bisa")
+          .update({ status: nextStatus })
+          .eq("id", numJobId);
+
+        if (updErr) throw updErr;
+
+        const acceptNotice = `✅ Mitra telah menyetujui pesanan: "${job.judul || 'Pesanan Jasa'}". Pengerjaan dapat segera dimulai.`;
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          sender_id: Number(myUserId),
+          message_type: "system",
+          content: acceptNotice,
+        });
+
+        // Update pesan order lama di chat
+        try {
+          const { data: orderMsgs } = await supabase
+            .from("messages")
+            .select("id, content")
+            .eq("conversation_id", conversationId)
+            .eq("message_type", "order");
+
+          if (orderMsgs && orderMsgs.length > 0) {
+            for (const m of orderMsgs) {
+              if (m.content.startsWith(`[ORDER]:${numJobId}|`)) {
+                const parts = m.content.split("|");
+                parts[3] = nextStatus;
+                await supabase.from("messages").update({ content: parts.join("|") }).eq("id", m.id);
+              }
+            }
+          }
+        } catch {}
+
+        setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: nextStatus }));
+        setJobInfo((prev: any) =>
+          prev && String(prev.id) === String(numJobId) ? { ...prev, status: nextStatus } : prev
+        );
+        await updateLastMessage("✅ Pesanan Diterima oleh Mitra");
+        await fetchAll();
+
+        try {
+          showPopup({
+            title: "Pesanan Diterima! 🚀",
+            message: "Anda telah menyetujui pesanan ini. Pengerjaan dapat dimulai.",
+            type: "success",
+          });
+        } catch {}
+      } catch (e: any) {
+        try { showPopup({ title: "Gagal", message: e.message || "Gagal menyetujui pesanan", type: "error" }); } catch {}
+      }
+      return;
+    } else if (action === "mitra_reject") {
+      const runReject = async () => {
+        try {
+          const numJobId = Number(jobId);
+          const res = await processOrderRefund(numJobId, "Ditolak oleh Mitra");
+
+          setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "dibatalkan" }));
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(numJobId)
+              ? { ...prev, status: "dibatalkan", payment_status: res.refunded ? "refunded" : "cancelled" }
+              : prev
+          );
+          setShowJobBanner(false);
+
+          // Update pesan order lama di chat
+          try {
+            const { data: orderMsgs } = await supabase
+              .from("messages")
+              .select("id, content")
+              .eq("conversation_id", conversationId)
+              .eq("message_type", "order");
+
+            if (orderMsgs && orderMsgs.length > 0) {
+              for (const m of orderMsgs) {
+                if (m.content.startsWith(`[ORDER]:${numJobId}|`)) {
+                  const parts = m.content.split("|");
+                  parts[3] = "dibatalkan";
+                  await supabase.from("messages").update({ content: parts.join("|") }).eq("id", m.id);
+                }
+              }
+            }
+          } catch {}
+
+          const rejectMsg = `❌ Mitra menolak pesanan ini.${res.refunded ? ` Dana telah dikembalikan ke saldo Klien.` : ""}`;
+          await supabase.from("messages").insert({
+            conversation_id: conversationId,
+            sender_id: String(myUserId),
+            message_type: "system",
+            content: rejectMsg,
+          });
+          await updateLastMessage("❌ Pesanan Ditolak");
+          await fetchAll();
+
+          try {
+            showPopup({
+              title: "Pesanan Ditolak",
+              message: "Pesanan telah dibatalkan.",
+              type: "info",
+            });
+          } catch {}
+        } catch (e: any) {
+          try { showPopup({ title: "Gagal", message: e.message || "Gagal menolak pesanan", type: "error" }); } catch {}
+        }
+      };
+
+      try {
+        showPopup({
+          title: "Tolak Pesanan Ini?",
+          message: "Apakah Anda yakin ingin menolak pesanan ini?",
+          type: "delete",
+          confirmText: "Ya, Tolak",
+          cancelText: "Batal",
+          onConfirm: runReject,
+        });
+      } catch {
+        Alert.alert("Tolak Pesanan?", "Yakin ingin menolak pesanan ini?", [
+          { text: "Batal", style: "cancel" },
+          { text: "Ya, Tolak", style: "destructive", onPress: runReject },
+        ]);
+      }
+      return;
     } else if (action === "accept" || action === "accept_final") {
-      // ✅ FIX WEB: Alert.alert TIDAK jalan di React Native Web — pakai window.confirm + showPopup
-      // 1:1 web handleAcceptOrder → showPopup confirm → fetch /api/orders/complete → update state
+      // Safety routing jika dipanggil oleh Mitra saat status masih menunggu konfirmasi mitra
+      const isPendingApproval = jobInfo?.status === "menunggu_konfirmasi_mitra";
+      const isMitraMe = Number(jobInfo?.mitra_id) === Number(myUserId);
+      if (isPendingApproval && isMitraMe && action === "accept") {
+        return orderAction(jobId, "mitra_accept");
+      }
+
+      // KLIEN MENERIMA HASIL KERJA & MERILIS DANA KE MITRA
       const doConfirmAccept = async () => {
-        // Tampilkan popup confirm 1:1 web (mobile popup + fallback web)
         const runAccept = async () => {
           try {
-                const numJobId = Number(jobId);
-                const { data: job, error: fetchErr } = await supabase
-                  .from("pekerjaan_bisa")
-                  .select("*")
-                  .eq("id", numJobId)
-                  .single();
+            const numJobId = Number(jobId);
+            const res = await releaseEscrowPayout(numJobId);
 
-                if (fetchErr || !job) {
-                  try { showPopup({ title: "Error", message: "Pesanan tidak ditemukan.", type: "error" }); } catch {}
-                  return;
-                }
+            const acceptMsg = res.isCOD
+              ? "✅ Pesanan COD selesai — pembayaran tunai di tempat."
+              : `✅ Pesanan Diterima! Dana sebesar Rp ${res.earnings.toLocaleString("id-ID")} telah dirilis ke Saldo Mitra. Silakan berikan rating & ulasan.`;
 
-                // 2. Baca setting persentase komisi platform dari Web Admin (1:1 web → admin_settings / app_settings)
-                //    Web default = 10%, DB seed = 3%, admin bisa ubah 0-50% di /admin/keuangan
-                let feePercentage = 10; // fallback 1:1 web (api/orders/complete & api/admin/escrow)
-                try {
-                  // coba admin_settings dulu (dipakai api escrow)
-                  const { data: s1 } = await supabase.from("admin_settings").select("value").eq("key", "service_fee_percentage").maybeSingle();
-                  if (s1 && s1.value !== undefined && s1.value !== null && String(s1.value).trim() !== "" && !isNaN(Number(s1.value))) {
-                    feePercentage = Number(s1.value);
-                  } else {
-                    // fallback ke app_settings (dipakai api/admin/settings whitelist)
-                    const { data: s2 } = await supabase.from("app_settings").select("value").eq("key", "service_fee_percentage").maybeSingle();
-                    if (s2 && s2.value !== undefined && s2.value !== null && String(s2.value).trim() !== "" && !isNaN(Number(s2.value))) {
-                      feePercentage = Number(s2.value);
-                    }
-                  }
-                } catch (setErr) {
-                  console.warn("Gagal membaca service_fee_percentage, pakai fallback 10%:", setErr);
-                }
+            await supabase.from("messages").insert({
+              conversation_id: conversationId,
+              sender_id: Number(myUserId),
+              message_type: "system",
+              content: acceptMsg,
+            });
 
-                const isCOD = job.payment_method === "COD" || job.payment_status === "cod_pending";
-                const agreedPrice = Number(job.agreed_price) || Number(String(job.budget || "").replace(/\D/g, "")) || 0;
-                const platformFee = Math.round((agreedPrice * feePercentage) / 100);
-                const mitraEarnings = Math.max(0, agreedPrice - platformFee);
+            // Update UI state langsung
+            setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "selesai" }));
+            setJobInfo((prev: any) =>
+              prev && String(prev.id) === String(jobId) ? { ...prev, status: "selesai" } : prev
+            );
+            setShowJobBanner(false);
+            await updateLastMessage("✅ Pesanan Selesai & Dana Dirilis");
+            await fetchAll();
 
-                if (isCOD) {
-                  await supabase.from("pekerjaan_bisa").update({
-                    status: "selesai",
-                    payment_status: "cod_completed",
-                    platform_fee: 0,
-                    mitra_earnings: 0,
-                    is_rated: false,
-                  }).eq("id", numJobId);
-
-                  await supabase.from("messages").insert({
-                    conversation_id: conversationId,
-                    sender_id: Number(myUserId),
-                    message_type: "system",
-                    content: "✅ Pesanan COD selesai — pembayaran tunai di tempat.",
-                  });
-                } else {
-                  await supabase.from("pekerjaan_bisa").update({
-                    status: "selesai",
-                    payment_status: "released",
-                    platform_fee: platformFee,
-                    mitra_earnings: mitraEarnings,
-                    is_rated: false,
-                  }).eq("id", numJobId);
-
-                  // Update saldo mitra di users_bisa
-                  if (job.mitra_id && mitraEarnings > 0) {
-                    const { data: mitraUser } = await supabase
-                      .from("users_bisa")
-                      .select("id, saldo, balance")
-                      .eq("id", job.mitra_id)
-                      .maybeSingle();
-
-                    if (mitraUser) {
-                      const cur = Number(mitraUser.saldo || mitraUser.balance || 0);
-                      const newBal = cur + mitraEarnings;
-                      await supabase.from("users_bisa").update({ saldo: newBal, balance: newBal }).eq("id", job.mitra_id);
-                    }
-                  }
-
-                  const acceptMsg = `✅ Pesanan Diterima! Dana sebesar Rp ${mitraEarnings.toLocaleString("id-ID")} telah dirilis ke Saldo Mitra. Silakan berikan rating & ulasan.`;
-                  await supabase.from("messages").insert({
-                    conversation_id: conversationId,
-                    sender_id: Number(myUserId),
-                    message_type: "system",
-                    content: acceptMsg,
-                  });
-                }
-
-                // Update UI state langsung + SEMBUNYIKAN banner invoice 1:1 Image 2
-                setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "selesai" }));
-                setJobInfo((prev: any) => prev && String(prev.id) === String(jobId) ? { ...prev, status: "selesai" } : prev);
-                setShowJobBanner(false);
-                await updateLastMessage("✅ Pesanan Selesai & Dana Dirilis");
-                await fetchAll();
-
-                try { showPopup({ title: "Pesanan selesai! 🎉", message: "Dana diteruskan ke Mitra. Silakan beri ulasan.", type: "success" }); } catch {}
-                setTimeout(() => {
-                  try { router.push(`/c/ulasan/${jobId}` as any); } catch {}
-                }, 600);
-              } catch (e: any) {
-                try { showPopup({ title: "Error", message: e.message || "Gagal memproses", type: "error" }); } catch {}
-              }
+            try {
+              showPopup({
+                title: "Pesanan selesai! 🎉",
+                message: "Dana diteruskan ke Mitra. Silakan beri ulasan.",
+                type: "success",
+              });
+            } catch {}
+            setTimeout(() => {
+              try { router.push(`/c/ulasan/${jobId}` as any); } catch {}
+            }, 600);
+          } catch (e: any) {
+            try { showPopup({ title: "Error", message: e.message || "Gagal memproses", type: "error" }); } catch {}
+          }
         };
+
         try {
           showPopup({
             title: "Selesaikan Pesanan?",
@@ -556,16 +780,20 @@ export function useChatLogic(conversationId: string) {
           ]);
         }
       };
-      // Panggil langsung — tidak nunggu fetch dulu biar tombol terasa instan
       doConfirmAccept();
       return;
     } else if (action === "reject" || action === "cancel") {
       const runCancel = async () => {
         try {
           const numJobId = Number(jobId);
-          await supabase.from("pekerjaan_bisa").update({ status: "dibatalkan", payment_status: "cancelled" }).eq("id", numJobId);
+          const res = await processOrderRefund(numJobId, "Dibatalkan oleh pengguna");
+
           setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "dibatalkan" }));
-          setJobInfo((prev: any) => prev && String(prev.id) === String(numJobId) ? { ...prev, status: "dibatalkan", payment_status: "cancelled" } : prev);
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(numJobId)
+              ? { ...prev, status: "dibatalkan", payment_status: res.refunded ? "refunded" : "cancelled" }
+              : prev
+          );
           setShowJobBanner(false);
 
           // Update pesan order lama menjadi status dibatalkan
@@ -587,11 +815,17 @@ export function useChatLogic(conversationId: string) {
             }
           } catch {}
 
+          const cancelMsg = `❌ Pesanan #${numJobId} telah dibatalkan.${
+            res.refunded
+              ? ` Dana sebesar Rp ${res.amount.toLocaleString("id-ID")} telah dikembalikan ke saldo Dompet Anda dan dapat ditarik.`
+              : ""
+          }`;
+
           await supabase.from("messages").insert({
             conversation_id: conversationId,
             sender_id: String(myUserId),
             message_type: "system",
-            content: `❌ Pesanan #${numJobId} telah dibatalkan.`,
+            content: cancelMsg,
           });
           await updateLastMessage("❌ Pesanan Dibatalkan");
           setMessages((prev: any[]) =>
@@ -604,6 +838,17 @@ export function useChatLogic(conversationId: string) {
               return m;
             })
           );
+          await fetchAll();
+
+          try {
+            showPopup({
+              title: "Pesanan Dibatalkan",
+              message: res.refunded
+                ? `Dana sebesar Rp ${res.amount.toLocaleString("id-ID")} telah dikembalikan ke saldo Dompet Anda.`
+                : "Pesanan telah dibatalkan.",
+              type: "info",
+            });
+          } catch {}
         } catch (e: any) {
           Alert.alert("Gagal", e.message || "Gagal membatalkan pesanan");
         }
@@ -624,6 +869,87 @@ export function useChatLogic(conversationId: string) {
           { text: "Ya, Batalkan", style: "destructive", onPress: runCancel },
         ]);
       }
+    } else if (action === "mitra_approve_cancel") {
+      const runApproveCancel = async () => {
+        try {
+          const res = await respondOrderCancellation(jobId, true);
+          setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "dibatalkan" }));
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(jobId)
+              ? { ...prev, status: "dibatalkan", payment_status: "refunded" }
+              : prev
+          );
+          setShowJobBanner(false);
+          await updateLastMessage("✅ Pembatalan Disetujui");
+          await fetchAll();
+          try {
+            showPopup({
+              title: "Pembatalan Disetujui",
+              message: "Pesanan dibatalkan dan dana dikembalikan ke Saldo Dompet Klien.",
+              type: "success",
+            });
+          } catch {}
+        } catch (e: any) {
+          try { showPopup({ title: "Gagal", message: e.message, type: "error" }); } catch {}
+        }
+      };
+
+      try {
+        showPopup({
+          title: "Setujui Pembatalan?",
+          message: "Klien mengajukan pembatalan pesanan ini. Jika Anda setuju, dana pembayaran akan dikembalikan ke saldo Dompet Klien.",
+          type: "confirm",
+          confirmText: "Ya, Setujui",
+          cancelText: "Batal",
+          onConfirm: runApproveCancel,
+        });
+      } catch {
+        Alert.alert("Setujui Pembatalan?", "Dana pembayaran akan dikembalikan ke saldo Dompet Klien.", [
+          { text: "Batal", style: "cancel" },
+          { text: "Ya, Setujui", onPress: runApproveCancel },
+        ]);
+      }
+      return;
+    } else if (action === "mitra_reject_cancel") {
+      const runRejectCancel = async () => {
+        try {
+          await respondOrderCancellation(jobId, false, "Pekerjaan sedang berlangsung / progres > 80%");
+          setJobStatusMap((p: Record<string, string>) => ({ ...p, [jobId]: "sedang_dikerjakan" }));
+          setJobInfo((prev: any) =>
+            prev && String(prev.id) === String(jobId)
+              ? { ...prev, status: "sedang_dikerjakan" }
+              : prev
+          );
+          await updateLastMessage("❌ Pembatalan Ditolak");
+          await fetchAll();
+          try {
+            showPopup({
+              title: "Pembatalan Ditolak",
+              message: "Pekerjaan tetap dilanjutkan. Jika ada kendala, hubungi Pusat Bantuan / Komplain.",
+              type: "info",
+            });
+          } catch {}
+        } catch (e: any) {
+          try { showPopup({ title: "Gagal", message: e.message, type: "error" }); } catch {}
+        }
+      };
+
+      try {
+        showPopup({
+          title: "Tolak Pembatalan?",
+          message: "Tolak pembatalan karena pekerjaan sudah berjalan (>80%)? Pekerjaan akan tetap dilanjutkan.",
+          type: "confirm",
+          confirmText: "Tolak Pembatalan",
+          cancelText: "Kembali",
+          onConfirm: runRejectCancel,
+        });
+      } catch {
+        Alert.alert("Tolak Pembatalan?", "Pekerjaan akan tetap dilanjutkan.", [
+          { text: "Kembali", style: "cancel" },
+          { text: "Tolak Pembatalan", onPress: runRejectCancel },
+        ]);
+      }
+      return;
     }
   };
 
@@ -647,21 +973,103 @@ export function useChatLogic(conversationId: string) {
     setShowOrderDetailModal(true);
   };
 
+  const pickDeliveryImage = async (useCamera = false) => {
+    try {
+      if (Platform.OS !== "web") {
+        const perm = useCamera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== "granted") {
+          showPopup({ title: "Izin Ditolak", message: useCamera ? "Izin kamera diperlukan." : "Izin galeri diperlukan.", type: "warning", theme: isMitraView ? "provider" : "client" });
+          return;
+        }
+      }
+      let result: any;
+      if (useCamera) result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false, base64: true });
+      else result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: false, base64: true });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      const asset = result.assets[0];
+
+      // 1. Tampilkan preview instan di modal (langsung dari URI lokal perangkat, tidak putih/blank)
+      setDeliveryPreviewUri(asset.uri);
+      setUploading(true);
+
+      const ext = (asset.fileName || asset.uri).split(".").pop()?.split("?")[0] || "jpg";
+      const fileName = `delivery_${deliveryJobId || conversationId}_${Date.now()}.${ext}`;
+
+      // 2. Kompresi gambar & peroleh base64 binary
+      let base64Data = asset.base64;
+      try {
+        const manip = await compressImageWithBase64(asset.uri, 1080, 0.7);
+        if (manip.base64) {
+          base64Data = manip.base64;
+        }
+      } catch (compErr) {
+        console.warn("[pickDeliveryImage] Compress warning, using original:", compErr);
+      }
+
+      let uploadPayload: any;
+      let contentType = asset.mimeType || "image/jpeg";
+
+      if (base64Data) {
+        uploadPayload = base64ToUint8Array(base64Data);
+        contentType = "image/jpeg";
+      } else {
+        const resp = await fetch(asset.uri);
+        uploadPayload = await resp.blob();
+      }
+
+      let publicUrl = "";
+      // 3. Upload ke job_attachments (chat_images) yang 100% stabil & terbukti bisa diakses publik
+      const { error: upErr } = await supabase.storage
+        .from("job_attachments")
+        .upload(`chat_images/${fileName}`, uploadPayload, { contentType, upsert: true });
+
+      if (!upErr) {
+        publicUrl = supabase.storage.from("job_attachments").getPublicUrl(`chat_images/${fileName}`).data.publicUrl;
+      } else {
+        console.warn("[Delivery Upload] job_attachments error, fallback to deliveries bucket:", upErr.message);
+        const { error: fbErr } = await supabase.storage
+          .from("deliveries")
+          .upload(`deliveries/${fileName}`, uploadPayload, { contentType, upsert: true });
+        if (fbErr) throw upErr || fbErr;
+        publicUrl = supabase.storage.from("deliveries").getPublicUrl(`deliveries/${fileName}`).data.publicUrl;
+      }
+
+      setDeliveryFileUrl(publicUrl);
+      showPopup({ title: "Foto Ditambahkan", message: "Foto bukti berhasil disiapkan.", type: "success", theme: isMitraView ? "provider" : "client" });
+    } catch (e: any) {
+      setDeliveryPreviewUri("");
+      setDeliveryFileUrl("");
+      showPopup({ title: "Gagal Upload", message: e.message || "Gagal mengunggah foto.", type: "error", theme: isMitraView ? "provider" : "client" });
+    } finally { setUploading(false); }
+  };
+
   const sendDelivery = async () => {
     if (!deliveryJobId) return;
+    const hasFile = !!deliveryFileUrl?.trim();
+    const hasLink = !!deliveryLink?.trim();
+    const hasNote = !!deliveryNote?.trim();
+    if (!hasFile && !hasLink && !hasNote) {
+      showPopup({ title: "Lampiran Diperlukan", message: "Sertakan foto bukti, link Drive, atau catatan untuk Klien sebelum mengirim.", type: "warning", theme: isMitraView ? "provider" : "client" });
+      if (Platform.OS !== "web") Alert.alert("Lampiran Diperlukan", "Sertakan foto bukti, link Drive, atau catatan.");
+      return;
+    }
+    if (hasLink && !/^https?:\/\/.+/i.test(deliveryLink.trim())) {
+      showPopup({ title: "Link Tidak Valid", message: "Link harus diawali https://", type: "warning", theme: isMitraView ? "provider" : "client" });
+      return;
+    }
     setSendingDelivery(true);
     try {
       const file = deliveryFileUrl ? encodeURIComponent(deliveryFileUrl) : "";
-      const link = deliveryLink ? encodeURIComponent(deliveryLink) : "";
-      const note = deliveryNote ? encodeURIComponent(deliveryNote) : "";
+      const link = deliveryLink ? encodeURIComponent(deliveryLink.trim()) : "";
+      const note = deliveryNote ? encodeURIComponent(deliveryNote.trim()) : "";
       const content = `[DELIVERY]:${deliveryJobId}|${file}|${link}|${note}`;
       await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: Number(myUserId), content, message_type: "delivery" });
-      await supabase.from("pekerjaan_bisa").update({ status: "menunggu_konfirmasi_selesai" }).eq("id", Number(deliveryJobId));
+      await supabase.from("pekerjaan_bisa").update({ status: "menunggu_konfirmasi_selesai", work_file_url: deliveryFileUrl || null, work_link_url: deliveryLink.trim() || null, work_note: deliveryNote.trim() || null, submitted_at: new Date().toISOString() }).eq("id", Number(deliveryJobId));
       setJobStatusMap(p => ({ ...p, [deliveryJobId]: "menunggu_konfirmasi_selesai" }));
       await updateLastMessage("📦 Hasil Kerja Dikirim");
-      setShowDeliveryModal(false); setDeliveryLink(""); setDeliveryNote(""); setDeliveryFileUrl("");
-      Alert.alert("Terkirim", "Menunggu konfirmasi Klien.");
-    } catch (e: any) { Alert.alert("Gagal", e.message); }
+      setShowDeliveryModal(false); setDeliveryLink(""); setDeliveryNote(""); setDeliveryFileUrl(""); setDeliveryPreviewUri("");
+      try { showPopup({ title: "Terkirim", message: "Hasil kerja terkirim. Menunggu konfirmasi Klien.", type: "success", theme: isMitraView ? "provider" : "client" }); } catch { Alert.alert("Terkirim", "Menunggu konfirmasi Klien."); }
+    } catch (e: any) { try { showPopup({ title: "Gagal", message: e.message, type: "error" }); } catch { Alert.alert("Gagal", e.message); } }
     finally { setSendingDelivery(false); }
   };
 
@@ -735,19 +1143,19 @@ export function useChatLogic(conversationId: string) {
     showOfferModal, setShowOfferModal, offerAmount, setOfferAmount,
     showAttachments, setShowAttachments, showMenu, setShowMenu, showDeleteModal, setShowDeleteModal,
     showInvoiceModal, setShowInvoiceModal, sendingInvoice,
-    showDeliveryModal, setShowDeliveryModal, deliveryJobId, setDeliveryJobId, deliveryLink, setDeliveryLink, deliveryNote, setDeliveryNote, deliveryFileUrl, setDeliveryFileUrl, sendingDelivery,
+    showDeliveryModal, setShowDeliveryModal, deliveryJobId, setDeliveryJobId, deliveryLink, setDeliveryLink, deliveryNote, setDeliveryNote, deliveryFileUrl, setDeliveryFileUrl, deliveryPreviewUri, setDeliveryPreviewUri, sendingDelivery,
     showRevisionModal, setShowRevisionModal, revisionJobId, setRevisionJobId, revisionNote, setRevisionNote, sendingRevision,
     showPaySheet, setShowPaySheet, payJobId, setPayJobId, payBudget, setPayBudget, payingCod, payingOnline,
     showOrderDetailModal, setShowOrderDetailModal, selectedOrderDetail, setSelectedOrderDetail,
-    jobStatusMap, jobInfo, showJobBanner, setShowJobBanner, deletingChat,
+    jobStatusMap, jobPaymentMethodMap, jobInfo, showJobBanner, setShowJobBanner, deletingChat,
     clientQuickReplies, mitraQuickReplies, isChatLocked,
     // actions (new names)
-    sendMessage, pickImage, sendLocation, createOffer, actionOffer, createInvoice, choosePayment, orderAction, openOrderDetail, sendDelivery, requestRevision, deleteChat, fetchAll,
+    sendMessage, pickImage, sendLocation, createOffer, actionOffer, createInvoice, choosePayment, orderAction, openOrderDetail, sendDelivery, pickDeliveryImage, requestRevision, deleteChat, fetchAll,
     // aliases for backward compat
     handleSendMessage: sendMessage, handlePickImage: pickImage, handleSendLocation: sendLocation,
     handleCreateOffer: createOffer, handleActionOffer: actionOffer, handleCreateInvoice: createInvoice,
     handleChoosePayment: choosePayment, handleOrderAction: orderAction, handleOpenOrderDetail: openOrderDetail,
-    handleSendDelivery: sendDelivery, handleRequestRevision: requestRevision, handleDeletePersonalChat: deleteChat,
+    handleSendDelivery: sendDelivery, handlePickDeliveryImage: pickDeliveryImage, handleRequestRevision: requestRevision, handleDeletePersonalChat: deleteChat,
     fetchConversationAndMessages: fetchAll,
   };
 }

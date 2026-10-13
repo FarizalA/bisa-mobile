@@ -15,7 +15,7 @@ export interface ChatInboxItem {
 
 const API_BASE =
   (process.env.EXPO_PUBLIC_API_URL as string) ||
-  "https://bisa-app.vercel.app"; // fallback — ganti via env jika ngrok/local
+  "https://bisa-admin.vercel.app"; // fallback — ganti via env jika ngrok/local
 
 async function buildUserHeader(): Promise<string | null> {
   const u = await getStoredUser<any>();
@@ -68,12 +68,22 @@ export async function fetchInboxChats(isMitra: boolean): Promise<ChatInboxItem[]
     }
   }
 
+  // Ghost-filter: jangan tampilkan room yang belum pernah ada pesan real (hanya placeholder "Percakapan baru dibuat" tanpa 1 pun row di `messages`)
+  // Cek sekali query: semua conversation_id yang punya minimal 1 message
+  let withRealMessage = new Set<string>();
+  try {
+    const ids = convs.map((c: any) => c.id);
+    if (ids.length) {
+      const { data: msgRows } = await supabase.from("messages").select("conversation_id").in("conversation_id", ids);
+      if (msgRows) msgRows.forEach((r: any) => withRealMessage.add(String(r.conversation_id)));
+    }
+  } catch {}
+
   const grouped = new Map<string, any>();
   for (const c of convs as any[]) {
-    // FIX: jangan hide room kosong — mitra habis klik Chat dari p/aktivitas/[id]
-    // room baru dibuat via ensureConversationAndNavigate last_message="Percakapan baru dibuat"
-    // tapi room lama dari web (last_message=null) juga harus tetap tampil biar tidak "Belum ada pesan"
-    // if (!c.last_message || String(c.last_message).trim() === "") continue;
+    // Room chat hanya boleh muncul di inbox jika sudah ada pesan yang terkirim (tidak kosong)
+    if (!withRealMessage.has(String(c.id))) continue;
+
     // Filter ketat role:
     // isMitra = true  (Inbox Mitra /p/chat) -> Hanya tampilkan chat di mana user = mitra_id (lawan bicara adalah Klien)
     // isMitra = false (Inbox Klien /c/chat) -> Hanya tampilkan chat di mana user = client_id (lawan bicara adalah Mitra)
@@ -159,7 +169,7 @@ export async function ensureConversationAndNavigate(
       }
     }
 
-    // 3. Buat baru
+    // 3. Buat baru (last_message tetap null sampai ada pesan pertama yang terkirim)
     const { data: created, error } = await supabase
       .from("conversations")
       .insert({
@@ -170,8 +180,8 @@ export async function ensureConversationAndNavigate(
         is_active: true,
         deleted_by_client: false,
         deleted_by_mitra: false,
-        last_message: "Percakapan baru dibuat",
-        last_message_at: new Date().toISOString(),
+        last_message: null,
+        last_message_at: null,
       })
       .select("id")
       .single();

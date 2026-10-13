@@ -9,6 +9,7 @@ import {
   Image,
 } from "react-native";
 import { MapPin, CheckCircle, Clock, X, AlertTriangle } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type CariKerjaLogic } from "../../hooks/useCariKerjaLogic";
 
 export default function CariKerjaDetailModal({ logic }: { logic: CariKerjaLogic }) {
@@ -33,6 +34,7 @@ export default function CariKerjaDetailModal({ logic }: { logic: CariKerjaLogic 
     setFullScreenImage,
   } = logic;
 
+  const insets = useSafeAreaInsets();
   if (!selectedJob) return null;
 
   const parsedDeskripsi = parseDeskripsi(selectedJob.deskripsi);
@@ -49,7 +51,7 @@ export default function CariKerjaDetailModal({ logic }: { logic: CariKerjaLogic 
       }}
     >
       <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl max-h-[85%] flex-col overflow-hidden">
+        <View className="bg-white rounded-t-3xl flex-col overflow-hidden" style={{ height: "85%", maxHeight: "92%" }}>
           {/* Header */}
           <View className="p-4 border-b border-gray-100 flex-row items-center justify-between">
             <Text className="text-base font-extrabold text-gray-900">Detail Pekerjaan</Text>
@@ -173,7 +175,10 @@ export default function CariKerjaDetailModal({ logic }: { logic: CariKerjaLogic 
           </ScrollView>
 
           {/* Footer Action */}
-          <View className="p-4 border-t border-gray-100 bg-white">
+          <View
+            className="p-4 border-t border-gray-100 bg-white"
+            style={{ paddingBottom: Math.max(16, insets.bottom + 12) }}
+          >
             {appliedJobs[selectedJob.id] ? (
               <View className="flex-col gap-2">
                 <View className="w-full py-3 bg-gray-100 rounded-full flex-row items-center justify-center gap-1.5">

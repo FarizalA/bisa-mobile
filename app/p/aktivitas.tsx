@@ -3,7 +3,6 @@ import { View, ScrollView, RefreshControl, Alert, Modal, Text, TextInput, Toucha
 import { CheckCircle2, X, FileText } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import ProviderBottomNav from "../../src/components/ProviderBottomNav";
 import ProviderAktivitasHeader from "../../src/components/provider-aktivitas/ProviderAktivitasHeader";
 import ProviderAktivitasTabs, { ProviderAktivitasTabKey } from "../../src/components/provider-aktivitas/ProviderAktivitasTabs";
 import ProviderAktivitasJobList, { ProviderJob } from "../../src/components/provider-aktivitas/ProviderAktivitasJobList";
@@ -174,8 +173,6 @@ export default function AktivitasProviderPage() {
           </View>
         </ScrollView>
       </View>
-
-      <ProviderBottomNav active="aktivitas" />
 
       {/* Reject Reason Modal */}
       <Modal visible={rejectModal.show} transparent animationType="fade" onRequestClose={() => setRejectModal({ show: false, job: null })}>

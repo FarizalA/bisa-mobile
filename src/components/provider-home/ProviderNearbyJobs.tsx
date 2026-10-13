@@ -1,6 +1,13 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Image, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { Image } from "expo-image";
 import { ChevronRight, Wifi, MapPin } from "lucide-react-native";
+
+function getThumb(url?: string | null) {
+  if (!url || !url.startsWith("http")) return null;
+  if (url.includes("supabase.co") && !url.includes("?")) return `${url}?width=120&height=120&resize=cover&quality=70`;
+  return url;
+}
 
 interface NearbyJobItem {
   id: number;
@@ -24,7 +31,7 @@ interface ProviderNearbyJobsProps {
   onJobDetail: (id: number) => void;
 }
 
-export default function ProviderNearbyJobs({
+function ProviderNearbyJobsComponent({
   loading,
   refreshing,
   jobs,
@@ -84,19 +91,19 @@ export default function ProviderNearbyJobs({
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
                   <View className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden items-center justify-center">
-                    {job.pelanggan?.face_url || job.pelanggan_face_url ? (
-                      <Image
-                        source={{
-                          uri: job.pelanggan?.face_url || job.pelanggan_face_url,
-                        }}
-                        style={{ width: 32, height: 32, borderRadius: 16 }}
-                      />
-                    ) : (
-                      <Image
-                        source={require("../../../assets/mascot.png")}
-                        style={{ width: 32, height: 32, borderRadius: 16 }}
-                      />
-                    )}
+                    <Image
+                      source={
+                        getThumb(job.pelanggan?.face_url || job.pelanggan_face_url)
+                          ? { uri: getThumb(job.pelanggan?.face_url || job.pelanggan_face_url)! }
+                          : require("../../../assets/mascot.png")
+                      }
+                      style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#f1f5f9" }}
+                      contentFit="cover"
+                      transition={100}
+                      cachePolicy="memory-disk"
+                      priority="low"
+                      recyclingKey={String(job.id)}
+                    />
                   </View>
                   <View className="flex-col">
                     <Text
@@ -168,6 +175,7 @@ export default function ProviderNearbyJobs({
 
                 <TouchableOpacity
                   onPress={() => onJobDetail(job.id)}
+                  activeOpacity={1}
                   className="h-8 px-4 rounded-full bg-emerald-600 items-center justify-center shadow-xs"
                 >
                   <Text className="text-xs font-bold text-white">Ambil Job</Text>
@@ -180,3 +188,5 @@ export default function ProviderNearbyJobs({
     </View>
   );
 }
+const ProviderNearbyJobs = React.memo(ProviderNearbyJobsComponent);
+export default ProviderNearbyJobs;
