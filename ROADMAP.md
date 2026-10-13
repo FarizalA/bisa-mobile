@@ -54,17 +54,26 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 
 ---
 
-### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet
+### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet - 🟡 KODE SELESAI (MENUNGGU DEPLOY VERCEL & UJI END-TO-END)
 **Target Utama:** Mencegah manipulasi saldo dari client-side dan memperkuat konsistensi buku besar keuangan.
 
-1. **Pindahkan Eksekusi Dana ke Server (`bisa-admin`)**:
-   - Buat endpoint:
-     - `POST /api/order/release`: Mengeksekusi rilis dana escrow ke mitra setelah validasi status pekerjaan `menunggu_konfirmasi_selesai`.
-     - `POST /api/order/refund`: Mengeksekusi pengembalian dana escrow ke saldo pelanggan saat pembatalan disetujui.
-     - `POST /api/order/cancel-request`: Menangani permintaan pembatalan dengan batas waktu 24 jam.
-2. **Audit Konsistensi Saldo Dompet**:
-   - Sinkronisasi kolom `saldo` dan `balance` di tabel `users_bisa`.
-   - Validasi saldo di backend sebelum pengajuan penarikan dana (`withdrawal_requests`) agar tidak bisa membuat saldo minus.
+1. **Pindahkan Eksekusi Dana ke Server (`bisa-admin`)** - ✅ SELESAI KODE:
+   - Buat endpoint unified di Next.js App Router:
+     - `POST /api/order/action`: Menangani `release`, `refund`, `request_cancel`, dan `respond_cancel` dengan verifikasi JWT Supabase dan idempotency check. ✅
+     - `POST /api/order`: Fallback route untuk action handler. ✅
+     - Endpoint pendukung: verifikasi `getAuthUser` dan pencatatan otomatis ke tabel `transactions`. ✅
+   - *Status deploy*: Kode sudah di-commit & push ke GitHub (`main`), menunggu deployment Vercel selesai sinkronisasi route. ⏳
+2. **Mobile Client (`bisa-mobile`)** - ✅ SELESAI KODE:
+   - Buat `src/lib/auth.ts`: Helper `getSupabaseToken()` untuk autentikasi Bearer JWT. ✅
+   - Refactor `src/lib/payment.ts`: Fungsi `releaseEscrowPayout` dan `processOrderRefund` diganti menjadi wrapper-fetch ke `/api/order/action`. ✅
+   - Perbarui `src/hooks/useChatLogic.ts` & `app/c/aktivitas.tsx` untuk menggunakan API server-side baru. ✅
+   - Pembersihan build: 0 error lint (`npx expo lint`) & 0 type error (`npx tsc --noEmit`). ✅
+   - Commit semua perubahan ke git master. ✅
+3. **Audit Konsistensi Saldo Dompet & Uji End-to-End**:
+   - Sinkronisasi kolom `saldo` dan `balance` di tabel `users_bisa`. ✅
+   - [ ] Uji release escrow via mobile/curl (cek saldo Mitra bertambah).
+   - [ ] Uji refund order via mobile/curl (cek saldo Klien kembali).
+   - [ ] Uji idempotensi (jalankan 2x, saldo tidak bertambah ganda).
 
 ---
 
