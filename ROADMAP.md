@@ -100,6 +100,8 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 | **FASE 2** | Server-Side Escrow | ✅ Selesai | Endpoint `/api/order/action` deployed, tested release/refund/idempotency, saldo verified. |
 | **FASE 3** | Photo Compression | ✅ Selesai (LINT/TYPECHECK CLEAN) | Helper `compressImageDetailed` di `src/lib/imageCompression.ts`. Semua titik upload (chat, delivery, posting, avatar, galeri, portofolio, KYC) pakai helper terpusat. Tidak ada lagi penolakan foto besar. |
 | **FASE 4** | Dispute Resolution + Chat Archive | ✅ Selesai (LINT/TYPECHECK CLEAN) | DB: kolom dispute_* + enum `dalam_sengketa` + archived_by_*. Backend: `POST /api/order/action` (action dispute) + `/api/admin/disputes` (GET/POST resolve). Mobile: tombol sengketa Mitra + Klien, modal alasan, banner `dalam_sengketa`, inbox tab Arsip + toggle arsip per-chat. Admin: halaman `/admin/disputes` dengan filter Menunggu/Selesai/Semua, tombol Rilis Dana / Refund. |
+| **FASE 5** | UI Transparansi Biaya + Timeline + Chat Kandidat | ✅ Selesai (LINT/TYPECHECK CLEAN) | Detail di bagian FASE 5 di bawah. |
+| **FASE 6** | Push Notification Terpadu | ✅ Selesai | DB: kolom `expo_push_token`/`push_token`/`push_token_updated_at` di `users_bisa`. Backend: `POST`/`DELETE /api/user/push-token`, `lib/push.ts` (`sendPushToUser`/`sendPushToUsers`/`pushInBackground`), `POST /api/push/trigger` (generik untuk DB webhook). Trigger terpasang: escrow held (webhook Midtrans), release/COD (order action), WD ACC/tolak (admin escrow). SQL DB webhook chat/lamaran/delivery/dispute: `bisa-admin/supabase/migrations/20241013_push_triggers.sql`. Mobile: `src/hooks/usePushToken.ts` (registrasi + channel + roll token), `app/_layout.tsx` (`setNotificationHandler` + deep-link observer), plugin `expo-notifications` di `app.config.js`. |
 
 
 
@@ -174,18 +176,23 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 
 ---
 
-### 🔔 FASE 6: Integrasi Notifikasi Terpadu (Push Notifications)
+### 🔔 FASE 6: Integrasi Notifikasi Terpadu (Push Notifications) — ✅ SELESAI
 **Target Utama:** Memastikan pengguna tidak melewatkan update pesanan dan pesan chat.
 
-1. **Persiapan Database & Token**:
-   - Kolom `push_token` pada tabel `users_bisa`.
-   - Registrasi token via `expo-notifications` saat login/buka aplikasi.
-2. **Trigger Notifikasi Otomatis**:
-   - Chat baru masuk.
-   - Mitra mengajukan penawaran / melamar pekerjaan.
-   - Status pembayaran berhasil (Escrow masuk).
-   - Mitra mengirim hasil pekerjaan.
-   - Pengajuan penarikan dana di-ACC atau ditolak oleh Admin.
+1. **Persiapan Database & Token** ✅:
+   - Kolom `expo_push_token` (text, nullable), `push_token`, `push_token_updated_at` pada tabel `users_bisa`. ✅
+   - Registrasi token via `expo-notifications` (`src/hooks/usePushToken.ts`): minta permission, buat channel Android `bisa-default`, ambil Expo push token, kirim ke backend `POST /api/user/push-token` dengan Bearer JWT. Listen token roll. Hapus token saat logout (`clearPushToken`). ✅
+   - Deep-link: tap notifikasi → `useNotificationObserver` di `app/_layout.tsx` arahkan ke `data.url`. ✅
+2. **Backend (`bisa-admin`)** ✅:
+   - `POST /api/user/push-token` (registrasi/update) & `DELETE` (hapus saat logout), verifikasi JWT Supabase. ✅
+   - `lib/push.ts`: `sendPushToUser`, `sendPushToUsers`, `pushInBackground` (fire-and-forget) ke Expo Push Service. ✅
+   - `POST /api/push/trigger`: endpoint generik (auth `x-admin-password`) untuk dipanggil DB webhook. ✅
+3. **Trigger Notifikasi Otomatis** ✅:
+   - **Escrow masuk** (`/api/payment/webhook`): status `escrow_held` → push ke mitra. ✅
+   - **Rilis dana / COD selesai** (`/api/order/action` release): push ke mitra. ✅
+   - **Withdrawal di-ACC/ditolak** (`/api/admin/escrow`): push ke user. ✅
+   - **Chat baru, lamaran baru, delivery, dispute** (DB webhook): SQL di `bisa-admin/supabase/migrations/20241013_push_triggers.sql` — trigger `messages`, `pelamar_pekerjaan`, `pekerjaan_bisa` (delivery & dispute) memanggil `/api/push/trigger?async=1` via `pg_net`. ✅
+   - *Catatan deploy*: jalankan skrip SQL di Supabase SQL Editor (aktifkan ekstensi `pg_net`, set `app.push_endpoint` & `app.push_password`). Setiap perubahan skema/trigger tetap dikoordinasikan sebelum eksekusi di Supabase. ✅
 
 ---
 

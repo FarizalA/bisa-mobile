@@ -1,11 +1,44 @@
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SupabaseProvider } from "../src/contexts/SupabaseContext";
 import { PopupProvider } from "../src/components/PopupProvider.native";
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View, StatusBar, Platform } from "react-native";
+import * as Notifications from "expo-notifications";
+import { usePushToken } from "../src/hooks/usePushToken";
 import "../global.css";
+
+// Tampilkan notifikasi sebagai banner + list (default-nya silent di iOS/Android)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: false,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+// Deep-link handler: ketika user tap notifikasi, arahkan ke URL di data
+function useNotificationObserver() {
+  useEffect(() => {
+    function redirect(notification: Notifications.Notification) {
+      const data: any = notification.request.content.data || {};
+      const url: string | undefined = data.url;
+      if (typeof url === "string" && url) {
+        try { router.push(url as any); } catch (e) { console.warn("[Push] redirect gagal:", e); }
+      }
+    }
+
+    const last = Notifications.getLastNotificationResponse();
+    if (last?.notification) redirect(last.notification);
+
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      redirect(response.notification);
+    });
+    return () => sub.remove();
+  }, []);
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -16,6 +49,10 @@ export default function RootLayout() {
     PlusJakartaSans_800ExtraBold,
   });
   const [ready, setReady] = useState(false);
+
+  // Push token registration (Fase 6)
+  usePushToken();
+  useNotificationObserver();
 
   // Jangan stuck selamanya kalau font gagal load — fallback ke system font setelah 2.5 detik
   useEffect(() => {

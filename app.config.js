@@ -45,7 +45,17 @@ export default ({ config }) => ({
       output: "static",
       favicon: "./assets/favicon.png",
     },
-    plugins: ["expo-router"],
+    plugins: [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/icon1.png",
+          color: "#FF6B00",
+          defaultChannel: "bisa-default",
+        },
+      ],
+    ],
     extra: {
       router: {},
       eas: {
