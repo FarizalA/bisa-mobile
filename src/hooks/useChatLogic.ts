@@ -148,8 +148,14 @@ export function useChatLogic(conversationId: string) {
               if (j.payment_method) {
                 pmMap[String(j.id)] = j.payment_method;
               }
-              // Auto-sync ke Midtrans jika ada pesanan yang masih 'menunggu_pembayaran'
-              if (j.status === "menunggu_pembayaran" || j.payment_status === "belum_bayar") {
+              // Auto-sync ke Midtrans jika ada pesanan yang payment_status belum pernah tercermin
+              if (
+                (j.payment_status === "belum_bayar" || !j.payment_status) &&
+                j.status !== "menunggu_persetujuan_batal" &&
+                j.status !== "selesai" &&
+                j.status !== "dibatalkan" &&
+                j.payment_token
+              ) {
                 checkAndSyncMidtransStatus(Number(j.id), j.payment_token).then((res) => {
                   if (res.isPaid) {
                     setJobStatusMap((prev) => ({ ...prev, [String(j.id)]: "sedang_dikerjakan" }));
@@ -177,7 +183,13 @@ export function useChatLogic(conversationId: string) {
           .maybeSingle();
         if (info) {
           setJobInfo(info);
-          if (info.status === "menunggu_pembayaran" || info.payment_status === "belum_bayar") {
+          if (
+            (info.payment_status === "belum_bayar" || !info.payment_status) &&
+            info.status !== "menunggu_persetujuan_batal" &&
+            info.status !== "selesai" &&
+            info.status !== "dibatalkan" &&
+            (info as any).payment_token
+          ) {
             checkAndSyncMidtransStatus(Number(info.id), (info as any).payment_token).then((res) => {
               if (res.isPaid) {
                 setJobInfo((prev: any) =>
@@ -540,8 +552,8 @@ export function useChatLogic(conversationId: string) {
       // Mitra hanya boleh kirim hasil jika escrow sudah dibayar (bukan COD)
       const j = jobStatusMap[jobId];
       const ji = jobInfo;
-      const isPaid = ji?.payment_status === "escrow_held" || ji?.payment_status === "paid" || ji?.payment_status === "settlement" || ji?.payment_status === "capture";
-      const isCOD = ji?.payment_method === "COD";
+      const isPaid = ["escrow_held", "paid", "settlement", "capture", "authorized"].includes(String(ji?.payment_status));
+      const isCOD = ji?.payment_method === "COD" || ji?.payment_status === "cod_pending";
       if (!isPaid && !isCOD) {
         try {
           showPopup({
@@ -735,11 +747,21 @@ export function useChatLogic(conversationId: string) {
       return;
     } else if (action === "accept" || action === "accept_final") {
       // KLIEN HANYA BOLEH TERIMA JIKA SUDAH BAYAR (bukan COD)
+      // Sync ke Midtrans dulu bila payment_status belum tercermin (webhook telat).
       {
         const ji = jobInfo;
-        const isPaid = ji?.payment_status === "escrow_held" || ji?.payment_status === "paid" || ji?.payment_status === "settlement" || ji?.payment_status === "capture";
-        const isCOD = ji?.payment_method === "COD";
+        let isPaid = ["escrow_held", "paid", "settlement", "capture", "authorized"].includes(String(ji?.payment_status));
+        const isCOD = ji?.payment_method === "COD" || ji?.payment_status === "cod_pending" || ji?.payment_status === "cod_completed";
         // accept_final adalah Klien klik Terima → wajib sudah dibayar
+        if (action === "accept_final" && !isPaid && !isCOD) {
+          try {
+            const syncRes = await checkAndSyncMidtransStatus(Number(jobId), (ji as any)?.payment_token);
+            if (syncRes.isPaid) {
+              isPaid = true;
+              setJobInfo((prev: any) => prev ? { ...prev, status: "sedang_dikerjakan", payment_status: "escrow_held" } : prev);
+            }
+          } catch {}
+        }
         if (action === "accept_final" && !isPaid && !isCOD) {
           try {
             showPopup({

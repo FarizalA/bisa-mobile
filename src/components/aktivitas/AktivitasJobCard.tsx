@@ -29,6 +29,7 @@ interface JobItem {
   budget?: string;
   agreed_price?: number;
   payment_status?: string;
+  payment_method?: string;
   status: string;
   is_rated?: boolean;
   mitra_id?: string;
@@ -300,7 +301,11 @@ export default function AktivitasJobCard({
         </View>
       )}
 
-      {(job.status === "sedang_dikerjakan" || job.status === "menunggu_konfirmasi_selesai" || isPaidEscrow) && job.status !== "selesai" && job.status !== "menunggu_persetujuan_batal" && job.status !== "dalam_sengketa" && (
+      {(() => {
+        const st = String(job.status);
+        const stOk = st === "sedang_dikerjakan" || st === "menunggu_konfirmasi_selesai";
+        if (!stOk || (!isPaidEscrow && job.payment_method !== "COD")) return null;
+        return (
         <View className="flex-col gap-2">
           <TouchableOpacity
             onPress={() => (isWorkingOver24h ? onCancelJob(job.id) : onMutualCancel(job))}
@@ -310,7 +315,7 @@ export default function AktivitasJobCard({
             {isWorkingOver24h ? <XCircle size={15} color="#b91c1c" /> : <Handshake size={15} color="#b91c1c" />}
             <Text className="text-xs font-black text-red-700">{isWorkingOver24h ? "Batalkan & Refund" : "Batal Sepakat"}</Text>
           </TouchableOpacity>
-          {job.status === "menunggu_konfirmasi_selesai" && onDispute ? (
+          {st === "menunggu_konfirmasi_selesai" && onDispute ? (
             <TouchableOpacity
               onPress={() => onDispute(job)}
               activeOpacity={0.88}
@@ -333,7 +338,8 @@ export default function AktivitasJobCard({
             </Text>
           </TouchableOpacity>
         </View>
-      )}
+        );
+      })()}
 
       {job.status === "selesai" && (
         <TouchableOpacity onPress={() => onOpenRating(job)} activeOpacity={0.88} className="w-full py-3 rounded-xl bg-amber-500 items-center justify-center flex-row gap-1.5">

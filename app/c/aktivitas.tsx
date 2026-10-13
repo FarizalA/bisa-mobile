@@ -25,7 +25,6 @@ import AktivitasEmptyState from "../../src/components/aktivitas/AktivitasEmptySt
 import {
   formatRupiah,
   processOrderRefund,
-  releaseEscrowPayout,
   requestOrderCancellation,
   checkAndProcessExpiredCancellations,
   submitOrderDispute,
@@ -159,7 +158,13 @@ export default function AktivitasPage() {
         const processedJobs = await Promise.all(
           data.map(async (job) => {
             // Auto-check sync langsung ke Midtrans API (tidak bergantung server Vercel)
-            if (job.status === "menunggu_pembayaran" && (job.payment_token || job.payment_url)) {
+            if (
+              (job.status === "menunggu_pembayaran" || job.payment_status === "belum_bayar" || job.payment_status === null) &&
+              job.status !== "menunggu_persetujuan_batal" &&
+              job.status !== "selesai" &&
+              job.status !== "dibatalkan" &&
+              (job.payment_token || job.payment_url)
+            ) {
               try {
                 const syncData = await checkAndSyncMidtransStatus(job.id, job.payment_token);
                 if (syncData.isPaid) {
@@ -348,12 +353,40 @@ export default function AktivitasPage() {
   };
 
   // C. Konfirmasi Selesai & Rilis Dana Escrow — panggil /api/orders/complete agar saldo mitra & fee platform terhitung
-  const handleReleaseFunds = (job: any) => {
+  const handleReleaseFunds = async (job: any) => {
     const isEscrow = Boolean(job.agreed_price && job.payment_status === "escrow_held");
+    const isCOD = job.payment_method === "COD" || job.payment_status === "cod_pending" || job.payment_status === "cod_completed";
     const rawAgreed = job.agreed_price || parseInt(String(job.budget || "").replace(/\D/g, "") || "0", 10);
-    const msg = isEscrow
+    
+    // SYNC STATUS PEMBAYARAN TERLEBIH DAHULU JIKA BELUM TERCERMIN
+    let effectivePaidEscrow = isEscrow;
+    if (!isEscrow && !isCOD && job.status !== "menunggu_pembayaran") {
+      try {
+        const syncData = await checkAndSyncMidtransStatus(job.id, job.payment_token);
+        if (syncData.isPaid) {
+          // Update local state dengan status baru
+          setJobs((prev) => prev.map((j) => 
+            j.id === job.id ? { ...j, status: "sedang_dikerjakan", payment_status: "escrow_held" } : j
+          ));
+          effectivePaidEscrow = true;
+        } else {
+          Alert.alert(
+            "Pembayaran Belum Terdeteksi",
+            "Sistem belum mendeteksi pembayaran masuk. Silakan tunggu atau coba lagi nanti.\nJika sudah bayar, pastikan transaksi berhasil."
+          );
+          return;
+        }
+      } catch (e: any) {
+        console.error("Sync error:", e);
+        Alert.alert("Gagal Sinkronisasi", "Tidak dapat mengecek status pembayaran.");
+        return;
+      }
+    }
+    
+    const msg = effectivePaidEscrow || isCOD
       ? `Apakah Anda yakin pekerjaan "${job.judul}" telah selesai?\n\nDana sebesar ${formatRupiah(rawAgreed)} akan dirilis ke Saldo Mitra (potongan platform otomatis terhitung).`
       : `Apakah Anda yakin pekerjaan "${job.judul}" telah selesai?`;
+      
     setConfirmSheet({
       title: "Konfirmasi Selesai",
       message: msg,
@@ -367,17 +400,22 @@ export default function AktivitasPage() {
           const rawApi = (process.env.EXPO_PUBLIC_API_URL || "").replace(/^EXPO_PUBLIC_API_URL=/, "").trim();
           const backendUrl = rawApi || (!isWeb ? "https://bisa-admin.vercel.app" : "http://localhost:3000");
 
-          const res = await fetch(`${backendUrl}/api/orders/complete`, {
+          const res = await fetch(`${backendUrl}/api/order/action`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ jobId: job.id, userId: user?.id, action: "accept" }),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await (await import("../../src/lib/auth")).getSupabaseToken()}`,
+            },
+            body: JSON.stringify({ jobId: job.id, action: "release" }),
           });
 
           const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            // Fallback rilis escrow langsung jika API backend offline
-            await releaseEscrowPayout(job.id);
+          
+          if (!res.ok || data.success === false) {
+            throw new Error(data.error || data.message || "Gagal merilis dana escrow");
           }
+
+          const isCODFinal = data.isCOD || job.payment_method === "COD";
 
           setJobs((prev) =>
             prev.map((j) =>
@@ -385,9 +423,9 @@ export default function AktivitasPage() {
                 ? {
                     ...j,
                     status: "selesai",
-                    payment_status: data.isCOD || job.payment_method === "COD" ? "cod_completed" : "released",
-                    platform_fee: data.platform_fee ?? j.platform_fee,
-                    mitra_earnings: data.mitra_earnings ?? j.mitra_earnings,
+                    payment_status: isCODFinal ? "cod_completed" : "released",
+                    platform_fee: data.fee ?? j.platform_fee,
+                    mitra_earnings: data.earnings ?? j.mitra_earnings,
                   }
                 : j
             )
@@ -395,7 +433,7 @@ export default function AktivitasPage() {
 
           setConfirmSheet({
             title: "Berhasil",
-            message: data.isCOD || job.payment_method === "COD"
+            message: isCODFinal
               ? "Pesanan COD selesai — tunai di tempat. Mengarahkan ke formulir ulasan…"
               : `Pekerjaan selesai & dana dirilis ke Mitra! Mengarahkan ke ulasan…`,
             confirmText: "Beri Ulasan",

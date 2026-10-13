@@ -111,8 +111,14 @@ export function useAktivitasProviderLogic() {
       const THREE_H = 3 * 3600 * 1000;
       const processed = await Promise.all(
         (data || []).map(async (j: any) => {
-          // Auto-sync status: kalau uang sudah masuk Midtrans tapi still menunggu_pembayaran, ubah ke sedang_dikerjakan
-          if (j.status === "menunggu_pembayaran" && ((j as any).payment_token || (j as any).payment_url)) {
+          // Auto-sync status: kalau uang sudah masuk Midtrans tapi payment_status belum escrow_held, ubah ke sedang_dikerjakan
+          if (
+            (j.status === "menunggu_pembayaran" || j.payment_status === "belum_bayar" || j.payment_status === null) &&
+            j.status !== "menunggu_persetujuan_batal" &&
+            j.status !== "selesai" &&
+            j.status !== "dibatalkan" &&
+            ((j as any).payment_token || (j as any).payment_url)
+          ) {
             try {
               const syncData = await checkAndSyncMidtransStatus(Number(j.id), (j as any).payment_token);
               if (syncData.isPaid) {
