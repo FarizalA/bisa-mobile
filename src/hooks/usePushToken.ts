@@ -1,12 +1,19 @@
 // Hook: registrasi & manajemen Expo Push Token (Fase 6)
 import { useEffect, useRef, useState } from "react";
-import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as Device from "expo-device";
 import { supabase } from "../lib/supabase";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://bisa-admin.vercel.app";
+
+// Lazy-load expo-notifications agar Expo Go (SDK 53+) tidak crash.
+let Notifications: any = null;
+try {
+  Notifications = require("expo-notifications");
+} catch {
+  console.log("[Push] expo-notifications tidak tersedia di environment ini — skip");
+}
 
 export function usePushToken() {
   const [token, setToken] = useState<string | null>(null);
@@ -21,6 +28,13 @@ export function usePushToken() {
   const register = async () => {
     if (registeredRef.current) return;
     registeredRef.current = true;
+
+    // Expo Go (SDK 53+) tidak mendukung remote push — abort di sini.
+    if (!Notifications) {
+      console.log("[Push] expo-notifications tidak termuat — skip registrasi");
+      setLoading(false);
+      return;
+    }
 
     try {
       if (!Device.isDevice) {
@@ -76,7 +90,8 @@ export function usePushToken() {
 
   // Listen token change (roll)
   useEffect(() => {
-    const sub = Notifications.addPushTokenListener(async (newToken) => {
+    if (!Notifications) return;
+    const sub = Notifications.addPushTokenListener(async (newToken: any) => {
       setToken(newToken.data);
       await sendToBackend(newToken.data);
     });

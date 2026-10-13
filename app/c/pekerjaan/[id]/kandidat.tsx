@@ -84,15 +84,54 @@ export default function KandidatMobilePage() {
         setConfirmModal(null);
         setActingId(kandidat.id);
         try {
+          // Guard anti-dobel: pastikan pekerjaan belum punya mitra & masih cari mitra.
+          const { data: cur, error: curErr } = await supabase
+            .from("pekerjaan_bisa")
+            .select("status, mitra_id")
+            .eq("id", jobId)
+            .single();
+          if (curErr) throw curErr;
+          if (cur?.mitra_id || (cur?.status && cur.status !== "mencari_mitra")) {
+            Alert.alert("Sudah Diterima", "Pekerjaan ini sudah punya mitra terpilih. Muat ulang daftar kandidat.");
+            await fetchData();
+            return;
+          }
+          // Guard: kandidat ini belum pernah diterima/ditolak.
+          const { data: curCand } = await supabase
+            .from("pelamar_pekerjaan")
+            .select("status")
+            .eq("id", kandidat.id)
+            .single();
+          if (curCand?.status && !["menunggu", ""].includes(curCand.status)) {
+            Alert.alert("Sudah Diproses", `Kandidat ini sudah ${curCand.status}.`);
+            await fetchData();
+            return;
+          }
+
           const numHarga = parseInt(String(hargaTawaran).replace(/[^0-9]/g, ""), 10) || 0;
           const { error: candErr } = await supabase.from("pelamar_pekerjaan").update({ status: "diterima" }).eq("id", kandidat.id);
           if (candErr) throw candErr;
-          const { error: jobErr } = await supabase.from("pekerjaan_bisa").update({ status: "menunggu_pembayaran", mitra_id: mitraId, agreed_price: numHarga > 0 ? numHarga : null, harga_deal: numHarga > 0 ? numHarga : null }).eq("id", jobId);
-          if (jobErr) throw jobErr;
+          // Status enum valid yang tersedia: mencari_mitra | menunggu_konfirmasi_mitra |
+          // menunggu_pembayaran (setelah migrasi enum) | sedang_dikerjakan | ...
+          // Pakai "menunggu_pembayaran"; jika enum belum ditambah, fallback ke "menunggu_konfirmasi_mitra".
+          const targetStatus = "menunggu_pembayaran";
+          const { error: jobErr } = await supabase
+            .from("pekerjaan_bisa")
+            .update({ status: targetStatus, mitra_id: mitraId, agreed_price: numHarga > 0 ? numHarga : null, harga_deal: numHarga > 0 ? numHarga : null })
+            .eq("id", jobId);
+          if (jobErr) {
+            // Rollback status kandidat bila update pekerjaan gagal (mis. enum belum ada).
+            await supabase.from("pelamar_pekerjaan").update({ status: "menunggu" }).eq("id", kandidat.id);
+            if (/invalid input value for enum/i.test(jobErr.message)) {
+              throw new Error("Status 'menunggu_pembayaran' belum ada di enum database. Jalankan: alter type pekerjaan_bisa_status_enum add value if not exists 'menunggu_pembayaran';");
+            }
+            throw jobErr;
+          }
           try {
             await supabase.from("conversations").update({ job_id: jobId }).eq("client_id", user.id).eq("mitra_id", mitraId);
           } catch {}
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await fetchData();
           setConfirmModal({
             title: "Berhasil",
             message: "Kandidat diterima! Silakan bayar escrow di halaman Aktivitas.",
@@ -217,6 +256,8 @@ export default function KandidatMobilePage() {
             const isDitols = kandidat.status === "ditolak";
             const isDiterima = kandidat.status === "diterima";
             const isMenunggu = !kandidat.status || kandidat.status === "menunggu";
+            // Pekerjaan sudah punya mitra terpilih? Kunci semua aksi kandidat menunggu.
+            const jobLocked = !!job?.mitra_id && job.status !== "mencari_mitra";
             return (
               <View key={kandidat.id} className="bg-white rounded-[28px] border border-gray-100 p-4 gap-3">
                 <TouchableOpacity onPress={() => router.push(`/p/profil/${kandidat.mitra?.id || kandidat.mitra_id}` as any)} activeOpacity={0.85} className="flex-row gap-3">
@@ -237,7 +278,7 @@ export default function KandidatMobilePage() {
                     {!!kandidat.pesan && <Text className="mt-2 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 italic">"{kandidat.pesan}"</Text>}
                   </View>
                 </TouchableOpacity>
-                {isMenunggu ? (
+                {isMenunggu && !jobLocked ? (
                   <View className="gap-2.5">
                     <TouchableOpacity
                       disabled={chattingId === kandidat.id}

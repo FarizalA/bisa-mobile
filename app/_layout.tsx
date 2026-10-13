@@ -5,24 +5,33 @@ import { PopupProvider } from "../src/components/PopupProvider.native";
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View, StatusBar, Platform } from "react-native";
-import * as Notifications from "expo-notifications";
 import { usePushToken } from "../src/hooks/usePushToken";
 import "../global.css";
 
-// Tampilkan notifikasi sebagai banner + list (default-nya silent di iOS/Android)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Lazy-load expo-notifications agar tidak crash di Expo Go (SDK 53+ hapus remote push di Expo Go)
+let Notifications: any = null;
+try {
+  Notifications = require("expo-notifications");
+} catch {
+  console.log("[Push] expo-notifications tidak tersedia (Expo Go) — skip");
+}
+
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: false,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 // Deep-link handler: ketika user tap notifikasi, arahkan ke URL di data
 function useNotificationObserver() {
   useEffect(() => {
-    function redirect(notification: Notifications.Notification) {
+    if (!Notifications) return;
+    function redirect(notification: any) {
       const data: any = notification.request.content.data || {};
       const url: string | undefined = data.url;
       if (typeof url === "string" && url) {
@@ -30,10 +39,10 @@ function useNotificationObserver() {
       }
     }
 
-    const last = Notifications.getLastNotificationResponse();
+    const last = Notifications.getLastNotificationResponse?.();
     if (last?.notification) redirect(last.notification);
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
       redirect(response.notification);
     });
     return () => sub.remove();

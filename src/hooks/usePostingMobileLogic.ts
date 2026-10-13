@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
-import { compressImageDetailed } from "../lib/imageCompression";
+import { compressImageDetailed, compressImageWithBase64, base64ToUint8Array } from "../lib/imageCompression";
 import { usePopup } from "../components/PopupProvider.native";
 import { useKycGate } from "./useKycGate";
 
@@ -216,9 +216,8 @@ export function usePostingMobileLogic() {
     const a = res.assets[0];
     setUploadingFoto(true);
     try {
-      const comp = await compressImageDetailed(a.uri);
-      const uri = comp.uri;
-      setFotoUri(uri); setFotoPreview(uri);
+      const comp = await compressImageDetailed(a.uri, { maxDimension: 1280, quality: 0.7 });
+      setFotoUri(comp.uri); setFotoPreview(comp.uri);
     } catch (error) {
       console.error("Gagal kompresi foto:", error);
       setFotoUri(a.uri); setFotoPreview(a.uri);
@@ -244,23 +243,29 @@ export function usePostingMobileLogic() {
     }
     setLoading(true);
     try {
-      let fotoUrl = fotoPreview || "";
-      // upload jika ada fotoUri lokal yang belum jadi URL storage
-      if (fotoUri && fotoUri !== fotoPreview) fotoUrl = fotoPreview || fotoUri;
-      if (fotoUri && !fotoUrl.startsWith("http")) {
+      let fotoUrl = "";
+      // Upload foto bila ada URI lokal (belum jadi URL storage)
+      const needsUpload = !!fotoUri && !fotoUri.startsWith("http");
+      if (needsUpload) {
         setUploadingFoto(true);
-        const ext = (fotoUri.split(".").pop()?.split("?")[0] || "jpg").toLowerCase();
-        const fileName = `kebutuhan_${Date.now()}.${ext}`;
-        // expo web fetch uri -> blob, native fetch arrayBuffer
+        // Nama file: selalu .jpg karena output kompresi = JPEG. Hindari ext sampah
+        // seperti ".blob:http:" yang muncul dari content:// / file:// URI.
+        const fileName = `kebutuhan_${Date.now()}.jpg`;
+        // Upload biner lewat base64 — jauh lebih andal daripada fetch(uri).blob() di RN
+        // (fetch file:// & content:// sering mengembalikan body kosong / "File not found").
+        let payload: any;
         try {
-          const res: any = await fetch(fotoUri);
-          const blob = await res.blob ? await res.blob() : new Blob([await res.arrayBuffer()]);
-          const { error } = await supabase.storage.from("berkas_kyc").upload(fileName, blob as any, { contentType: `image/${ext==="png"?"png":"jpeg"}` });
-          if (!error) {
-            const { data: pub } = supabase.storage.from("berkas_kyc").getPublicUrl(fileName);
-            fotoUrl = pub.publicUrl;
-          }
-        } catch {}
+          const comp = await compressImageWithBase64(fotoUri, 1280, 0.7);
+          payload = comp.base64 ? base64ToUint8Array(comp.base64) : (await (await fetch(fotoUri)).blob());
+        } catch {
+          payload = await (await fetch(fotoUri)).blob();
+        }
+        const { error: upErr } = await supabase.storage
+          .from("berkas_kyc")
+          .upload(fileName, payload, { contentType: "image/jpeg", upsert: true });
+        if (upErr) throw new Error(`Gagal upload foto: ${upErr.message}`);
+        const { data: pub } = supabase.storage.from("berkas_kyc").getPublicUrl(fileName);
+        fotoUrl = pub.publicUrl;
         setUploadingFoto(false);
       } else if (fotoPreview && fotoPreview.startsWith("http")) {
         fotoUrl = fotoPreview;
@@ -269,7 +274,9 @@ export function usePostingMobileLogic() {
       const finalBudget = budgetType==="total" ? `Rp ${parseInt(budget||"0").toLocaleString("id-ID")} (Total)` : `Rp ${parseInt(budget||"0").toLocaleString("id-ID")} / Teknisi`;
       const expiresAt = Date.now() + masaBerlaku.value * 60*60*1000;
       let detailTambahan = `[INFO TAMBAHAN]\nRadius: ${radius}\nBatas Waktu: ${deadline.name}\nNego: ${isAutoNego?"Ya":"Tidak"}\nTeknisi: ${providerCount} orang.\nKoordinat GPS: ${mapCoords.lat}, ${mapCoords.lng}\n[EXPIRES_AT]: ${expiresAt}`;
-      if (fotoUrl) detailTambahan += `\n[FOTO LAMPIRAN]: ${fotoUrl}`;
+      // Hanya tulis tag bila URL benar-benar ada — cegah "[FOTO LAMPIRAN]: " kosong
+      // yang bikin admin render <img src=""> (broken image).
+      if (fotoUrl && fotoUrl.startsWith("http")) detailTambahan += `\n[FOTO LAMPIRAN]: ${fotoUrl}`;
 
       const kategoriAkhir = kategori.name==="Lainnya" ? kategoriLainnya.trim()||"Lainnya" : kategori.name;
       const payload: any = {
