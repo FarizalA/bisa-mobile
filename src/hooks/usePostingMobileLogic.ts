@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import { getStoredUser } from "../lib/user-storage";
-import { compressImage } from "../lib/imageCompression";
+import { compressImageDetailed } from "../lib/imageCompression";
 import { usePopup } from "../components/PopupProvider.native";
 import { useKycGate } from "./useKycGate";
 
@@ -214,14 +214,10 @@ export function usePostingMobileLogic() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false });
     if (res.canceled || !res.assets?.[0]) return;
     const a = res.assets[0];
-    if ((a.fileSize||0) > 8*1024*1024) {
-      showPopup({ title: "File Terlalu Besar", message: "Ukuran maksimal foto adalah 8 MB.", type: "warning", theme: "client" });
-      return;
-    }
-    
     setUploadingFoto(true);
     try {
-      const uri = await compressImage(a.uri);
+      const comp = await compressImageDetailed(a.uri);
+      const uri = comp.uri;
       setFotoUri(uri); setFotoPreview(uri);
     } catch (error) {
       console.error("Gagal kompresi foto:", error);

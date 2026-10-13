@@ -13,17 +13,13 @@ export interface ChatInboxItem {
   last_message_time: string;
 }
 
-const API_BASE =
-  (process.env.EXPO_PUBLIC_API_URL as string) ||
-  "https://bisa-admin.vercel.app"; // fallback — ganti via env jika ngrok/local
-
 async function buildUserHeader(): Promise<string | null> {
   const u = await getStoredUser<any>();
   if (!u) return null;
   return JSON.stringify(u);
 }
 
-export async function fetchInboxChats(isMitra: boolean): Promise<ChatInboxItem[]> {
+export async function fetchInboxChats(isMitra: boolean, archivedOnly = false): Promise<ChatInboxItem[]> {
   const userStr = await buildUserHeader();
   if (!userStr) return [];
   const user = JSON.parse(userStr);
@@ -44,7 +40,7 @@ export async function fetchInboxChats(isMitra: boolean): Promise<ChatInboxItem[]
     const { data } = await supabase
       .from("conversations")
       .select(
-        `id, client_id, mitra_id, type, job_id, last_message, last_message_at, is_active, deleted_by_client, deleted_by_mitra, client:client_id(id,name,face_url), mitra:mitra_id(id,name,face_url)`
+        `id, client_id, mitra_id, type, job_id, last_message, last_message_at, is_active, deleted_by_client, deleted_by_mitra, archived_by_client, archived_by_mitra, client:client_id(id,name,face_url), mitra:mitra_id(id,name,face_url)`
       )
       .or(`client_id.eq.${user.id},mitra_id.eq.${user.id}`)
       .order("last_message_at", { ascending: false });
@@ -52,6 +48,9 @@ export async function fetchInboxChats(isMitra: boolean): Promise<ChatInboxItem[]
     convs = (data || []).filter((c: any) => {
       if (String(c.client_id) === uid && c.deleted_by_client) return false;
       if (String(c.mitra_id) === uid && c.deleted_by_mitra) return false;
+      // Filter arsip: tab "Semua" hanya non-arsip, tab "Arsip" hanya arsip milik role ini
+      const isArchived = isMitra ? !!c.archived_by_mitra : !!c.archived_by_client;
+      if (archivedOnly !== isArchived) return false;
       return true;
     });
   } catch {}
@@ -217,4 +216,41 @@ export async function ensureConversationAndNavigate(
     console.error("ensureConversationAndNavigate catch:", err);
     return null;
   }
+}
+
+/**
+ * Toggle arsip chat (arsipkan / batal arsip) untuk user saat ini.
+ * Hanya mengubah kolom milik role user (archived_by_client atau archived_by_mitra).
+ */
+export async function toggleArchiveConversation(
+  conversationId: string,
+  isMitra: boolean
+): Promise<{ success: boolean; isArchived: boolean }> {
+  const userStr = await buildUserHeader();
+  if (!userStr) return { success: false, isArchived: false };
+
+  // Cek status arsip sekarang
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("archived_by_client, archived_by_mitra")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (!conv) return { success: false, isArchived: false };
+
+  const currentArchived = isMitra ? !!(conv as any).archived_by_mitra : !!(conv as any).archived_by_client;
+  const newArchived = !currentArchived;
+
+  const col = isMitra ? "archived_by_mitra" : "archived_by_client";
+  const { error } = await supabase
+    .from("conversations")
+    .update({ [col]: newArchived } as any)
+    .eq("id", conversationId);
+
+  if (error) {
+    console.error("[toggleArchiveConversation] Error:", error.message);
+    return { success: false, isArchived: currentArchived };
+  }
+
+  return { success: true, isArchived: newArchived };
 }

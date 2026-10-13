@@ -9,7 +9,7 @@ import { getStoredUser } from "../lib/user-storage";
 import { containsPhoneNumber } from "../lib/chatSecurity";
 import { parseOrderContent } from "../lib/chatHelpers";
 import { usePopup } from "../components/PopupProvider.native";
-import { compressImage, compressImageWithBase64, base64ToUint8Array } from "../lib/imageCompression";
+import { compressImageDetailed, compressImageWithBase64, base64ToUint8Array } from "../lib/imageCompression";
 import { checkAndSyncMidtransStatus } from "../lib/midtransDirect";
 import {
   processOrderRefund,
@@ -294,7 +294,8 @@ export function useChatLogic(conversationId: string) {
         const asset = result.assets[0];
         
         // Kompres gambar sebelum diunggah
-        const compressedUri = await compressImage(asset.uri, 1080, 0.7);
+        const comp = await compressImageDetailed(asset.uri, { maxDimension: 1080, quality: 0.7 });
+        const compressedUri = comp.uri;
 
         const ext = (asset.fileName || asset.uri).split(".").pop() || "jpg";
         const fileName = `${conversationId}_${Date.now()}.${ext}`;
@@ -983,8 +984,8 @@ export function useChatLogic(conversationId: string) {
         }
       }
       let result: any;
-      if (useCamera) result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false, base64: true });
-      else result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: false, base64: true });
+      if (useCamera) result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false });
+      else result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, allowsEditing: false });
       if (result.canceled || !result.assets?.[0]?.uri) return;
       const asset = result.assets[0];
 

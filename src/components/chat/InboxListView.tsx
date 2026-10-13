@@ -1,6 +1,6 @@
-import React from "react";
-import { View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
-import { MessageSquare, Clock } from "lucide-react-native";
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, ActivityIndicator, Alert } from "react-native";
+import { MessageSquare, Clock, Archive, ArchiveRestore } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
 function formatTime(iso: string): string {
@@ -17,6 +17,7 @@ function StatusBadge({ status, isMitra }: { status: string; isMitra: boolean }) 
     selesai: { text: "Selesai", bg: "#ECFDF5", fg: "#047857" },
     dibatalkan: { text: "Dibatalkan", bg: "#FEF2F2", fg: "#B91C1C" },
     ditolak: { text: "Dibatalkan", bg: "#FEF2F2", fg: "#B91C1C" },
+    dalam_sengketa: { text: "Dalam Sengketa", bg: "#FEF3C7", fg: "#92400E" },
   };
   const badge = map[status] || { text: "Direct Chat", bg: isMitra ? "#ECFDF5" : "#EEF2FF", fg: isMitra ? "#047857" : "#4338CA" };
   return (
@@ -32,31 +33,39 @@ interface InboxListViewProps {
   loading: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
+  activeTab: "all" | "archive";
+  onArchiveToggle?: (conversationId: string) => void;
+  archivingId?: string | null;
 }
 
-export default function InboxListView({ role, chats, loading, refreshing, onRefresh }: InboxListViewProps) {
+export default function InboxListView({ role, chats, loading, refreshing, onRefresh, activeTab, onArchiveToggle, archivingId }: InboxListViewProps) {
   const router = useRouter();
   const isMitra = role === "mitra";
 
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-[#FAFAFA] py-16 gap-3">
-        <ActivityIndicator color="#FF6B00" />
+        <ActivityIndicator color={isMitra ? "#059669" : "#FF6B00"} />
         <Text className="text-xs font-semibold text-gray-400">Memuat pesan...</Text>
       </View>
     );
   }
 
   if (chats.length === 0) {
+    const isArchiveTab = activeTab === "archive";
     return (
       <View className="flex-1 items-center justify-center px-6 py-16 bg-[#FAFAFA]">
         <View className="bg-white rounded-[24px] border border-gray-100 shadow-sm px-6 py-10 items-center">
           <View className="w-16 h-16 bg-gray-50 rounded-full items-center justify-center mb-3">
-            <MessageSquare size={32} color="#9CA3AF" />
+            {isArchiveTab ? <Archive size={28} color="#9CA3AF" /> : <MessageSquare size={32} color="#9CA3AF" />}
           </View>
-          <Text className="font-extrabold text-gray-900 text-[15px] mb-1">Belum ada pesan</Text>
+          <Text className="font-extrabold text-gray-900 text-[15px] mb-1">{isArchiveTab ? "Arsip kosong" : "Belum ada pesan"}</Text>
           <Text className="text-sm text-gray-500 text-center leading-5 max-w-[260px]">
-            {isMitra ? "Obrolan akan muncul setelah ada percakapan langsung dari klien." : "Belum ada percakapan — yuk mulai pesan jasa dan ngobrol langsung dengan mitra terbaik!"}
+            {isArchiveTab
+              ? "Chat yang kamu arsipkan akan muncul di sini. Arsip tidak menghapus histori — bukti transaksi tetap tersimpan."
+              : isMitra
+                ? "Obrolan akan muncul setelah ada percakapan langsung dari klien."
+                : "Belum ada percakapan — yuk mulai pesan jasa dan ngobrol langsung dengan mitra terbaik!"}
           </Text>
         </View>
       </View>
@@ -67,7 +76,7 @@ export default function InboxListView({ role, chats, loading, refreshing, onRefr
     <ScrollView
       className="flex-1 bg-[#FAFAFA]"
       contentContainerStyle={{ padding: 16, paddingBottom: 28 }}
-      refreshControl={refreshing !== undefined ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#FF6B00"]} /> : undefined}
+      refreshControl={refreshing !== undefined ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[isMitra ? "#059669" : "#FF6B00"]} /> : undefined}
     >
       <View className="gap-3">
         {chats.map((chat) => (
@@ -78,6 +87,20 @@ export default function InboxListView({ role, chats, loading, refreshing, onRefr
                 const base = isMitra ? "/p/direct-chat" : "/c/direct-chat";
                 router.push(`${base}/${chat.conversation_id}` as any);
               }
+            }}
+            onLongPress={() => {
+              if (!onArchiveToggle || !chat.conversation_id) return;
+              const label = activeTab === "archive" ? "Keluarkan dari arsip?" : "Arsipkan chat ini?";
+              Alert.alert(
+                activeTab === "archive" ? "Keluarkan dari Arsip" : "Arsipkan Chat",
+                activeTab === "archive"
+                  ? "Chat akan kembali ke daftar Semua."
+                  : "Chat akan dipindahkan ke Arsip. Histori tetap tersimpan sebagai bukti.",
+                [
+                  { text: "Batal", style: "cancel" },
+                  { text: activeTab === "archive" ? "Keluarkan" : "Arsipkan", onPress: () => onArchiveToggle(chat.conversation_id!) },
+                ]
+              );
             }}
             activeOpacity={0.85}
             className="bg-white p-4 rounded-2xl border border-gray-100 flex-row gap-3 shadow-sm"
@@ -98,13 +121,30 @@ export default function InboxListView({ role, chats, loading, refreshing, onRefr
                 </View>
               </View>
               <Text className="text-sm text-gray-500" numberOfLines={1}>{chat.last_message}</Text>
-              <View className="mt-2 flex-row">
+              <View className="mt-2 flex-row items-center justify-between">
                 <StatusBadge status={chat.status} isMitra={isMitra} />
+                {onArchiveToggle && chat.conversation_id ? (
+                  <TouchableOpacity
+                    onPress={() => onArchiveToggle(chat.conversation_id!)}
+                    disabled={archivingId === chat.conversation_id}
+                    className="ml-2 w-8 h-8 rounded-full bg-gray-50 border border-gray-200 items-center justify-center"
+                    hitSlop={8}
+                  >
+                    {archivingId === chat.conversation_id ? (
+                      <ActivityIndicator size="small" color="#6B7280" />
+                    ) : activeTab === "archive" ? (
+                      <ArchiveRestore size={14} color="#059669" />
+                    ) : (
+                      <Archive size={14} color="#6B7280" />
+                    )}
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
           </TouchableOpacity>
         ))}
       </View>
+      <Text className="text-[10px] text-gray-400 text-center mt-4">Tekan lama pada chat untuk arsipkan / keluarkan dari arsip.</Text>
     </ScrollView>
   );
 }

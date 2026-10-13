@@ -355,6 +355,74 @@ export async function respondOrderCancellation(
 }
 
 /**
+ * Mengajukan sengketa (dispute) ke admin untuk pesanan yang bermasalah.
+ * Digunakan saat: revisi sudah batas maksimal, atau mitra menolak pembatalan.
+ * Status pekerjaan berubah menjadi 'dalam_sengketa' dan menunggu keputusan admin.
+ */
+export async function submitOrderDispute(
+  jobId: number | string,
+  reason: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const numJobId = Number(jobId);
+    if (!numJobId) throw new Error("ID pesanan tidak valid");
+    const cleanReason = reason?.trim();
+    if (!cleanReason || cleanReason.length < 10) {
+      throw new Error("Alasan sengketa wajib diisi minimal 10 karakter.");
+    }
+
+    const { getSupabaseToken } = await import("./auth");
+    const token = await getSupabaseToken();
+    const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/order/action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jobId: numJobId, action: "dispute", reason: cleanReason }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || data.message || "Gagal mengajukan sengketa");
+
+    // Injeksi pesan sistem ke chat sebagai bukti
+    try {
+      const { data: job } = await supabase
+        .from("pekerjaan_bisa")
+        .select("pelanggan_id, mitra_id, judul")
+        .eq("id", numJobId)
+        .maybeSingle();
+      if (job) {
+        const { ensureConversationAndNavigate } = await import("./chatInbox");
+        const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), numJobId, false);
+        if (convId) {
+          const msg = `⚖️ Sengketa diajukan: "${cleanReason}". Menunggu peninjauan Admin. Semua transaksi ditahan sampai keputusan.`;
+          await supabase.from("messages").insert({
+            conversation_id: convId,
+            sender_id: Number(job.pelanggan_id),
+            message_type: "system",
+            content: msg,
+          } as any);
+          await supabase.from("conversations").update({
+            last_message: msg,
+            last_message_at: new Date().toISOString(),
+          } as any).eq("id", convId);
+        }
+      }
+    } catch (e) {
+      console.warn("[submitOrderDispute] chat inject warn:", e);
+    }
+
+    return {
+      success: true,
+      message: data.message || "Sengketa berhasil diajukan. Menunggu peninjauan admin.",
+    };
+  } catch (err: any) {
+    console.error("[submitOrderDispute] Error:", err);
+    throw err;
+  }
+}
+
+/**
  * Memeriksa seluruh pesanan 'menunggu_persetujuan_batal' yang sudah melewati batas 24 jam tanpa respon mitra.
  * Jika sudah > 24 jam, otomatis dibatalkan dan direfund ke Klien.
  */

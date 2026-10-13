@@ -7,7 +7,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { supabase } from "../../src/lib/supabase";
 import { setStoredUser } from "../../src/lib/user-storage";
-import { compressImage } from "../../src/lib/imageCompression";
+import { compressImageDetailed } from "../../src/lib/imageCompression";
 import DaftarHeader from "../../src/components/daftar/DaftarHeader";
 import DaftarProgressCard from "../../src/components/daftar/DaftarProgressCard";
 import DaftarBiodataSection from "../../src/components/daftar/DaftarBiodataSection";
@@ -169,7 +169,8 @@ export default function DaftarPage() {
       if (!result.canceled && result.assets?.[0]?.uri) {
         let selectedUri = result.assets[0].uri;
         try {
-          selectedUri = await compressImage(selectedUri);
+          const compDaftar = await compressImageDetailed(selectedUri);
+          selectedUri = compDaftar.uri;
         } catch (error) {
           console.error("Gagal kompresi foto:", error);
         }

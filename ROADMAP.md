@@ -54,60 +54,104 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 
 ---
 
-### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet - 🟡 MENUNGGU DEPLOY VERCEL (COMMIT 3922E87)
+### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet - ✅ SELESAI (TESTED & VERIFIED)
 **Target Utama:** Mencegah manipulasi saldo dari client-side dan memperkuat konsistensi buku besar keuangan.
 
-**Status Timeline:**
-1. ✅ Backend endpoint `/api/order/action` diimplementasi lengkap (release, refund, request_cancel, respond_cancel).
-2. ✅ Mobile wrapper (`auth.ts`, `payment.ts`) sudah menggunakan fetch ke API Vercel.
-3. ✅ Lint & TypeScript bersih (0 error).
-4. ✅ Commit & push ke GitHub.
-5. 🟡 Build error #1: fallback route `/api/order/route.ts` meng-import `/action/route` → tidak valid di Next.js App Router → **FIXED** (hapus file).
-6. 🟡 Build error #2: `app/api/order/action/route.ts` **belum pernah di-commit** (untracked) → **FIXED** (`git add + commit 3922e87`).
-7. ⏳ **WAITING**: Vercel membangun ulang commit `3922e87`.
+1. **Pindahkan Eksekusi Dana ke Server (`bisa-admin`)** - ✅ SELESAI & TERUJI:
+   - Buat endpoint unified di Next.js App Router:
+     - `POST /api/order/action`: Menangani `release`, `refund`, `request_cancel`, dan `respond_cancel` dengan verifikasi JWT Supabase dan idempotency check. ✅
+     - Endpoint pendukung: verifikasi `getAuthUser` dan pencatatan otomatis ke tabel `transactions`. ✅
+   - *Status deploy*: Deployed di Vercel (`https://bisa-admin.vercel.app`). Respon 401 JSON untuk dummy token, 200 JSON untuk token valid. ✅
 
-**Yang diharapkan setelah Vercel selesai:**
-- ✅ Endpoint `/api/order/action` → HTTP 401 JSON (bukan 404 HTML).
-- ✅ Uji end-to-end: release escrow, refund, cancel via curl + token JWT.
-- ✅ Verifikasi saldo Supabase bertambah/berkurang sesuai aksi.
+2. **Mobile Client (`bisa-mobile`)** - ✅ KODE SELESAI:
+   - Buat `src/lib/auth.ts`: Helper `getSupabaseToken()` untuk autentikasi Bearer JWT. ✅
+   - Refactor `src/lib/payment.ts`: Fungsi `releaseEscrowPayout` dan `processOrderRefund` diganti menjadi wrapper-fetch ke `/api/order/action`. ✅
+   - Perbarui `src/hooks/useChatLogic.ts` & `app/c/aktivitas.tsx` untuk menggunakan API server-side baru. ✅
+   - Pembersihan build: 0 error lint (`npx expo lint`) & 0 type error (`npx tsc --noEmit`). ✅
+   - Commit semua perubahan ke git master. ✅
 
-**Artifact:**
-- File kode: `bisa-admin/app/api/order/action/route.ts` (177 baris, lengkap).
-- Dokumentasi test: `bisa-admin/TEST_ENDPOINT.md` (contoh curl + workflow).
-- Commit terakhir: `3922e87` (feat: add /api/order/action endpoint).
+3. **Uji End-to-End & Verifikasi Konsistensi Saldo** - ✅ SELESAI:
+   - Token Supabase test: user `testpelanggan@bisa.app` (id=1), saldo awal 250.000. ✅
+   - **Test Release COD (#465)**: Status → `selesai`, payment_status → `cod_completed`, mitra ID 1 bertambah sesuai agreed_price. ✅
+   - **Test Release Escrow Non-COD (#466)**: 
+     - Agreed price: 12.000 | Fee: 6.000 (50%) | Earnings mitra: 6.000. ✅
+     - Saldo mitra 316: **436.500 → 442.500** (+6.000) ✅
+     - Record transaction di `transactions` table. ✅
+   - **Test Refund (#464)**:
+     - Amount refunded: 12.000. ✅
+     - Saldo pelanggan ID 1: **250.000 → 262.000** (+12.000) ✅
+     - Status job → `dibatalkan`, payment_status → `refunded`. ✅
+   - **Test Idempotensi**:
+     - Jalankan refund lagi pada job #464 yang sudah refunded → **400 "Dana sudah diproses sebelumnya"**. ✅
+     - Saldo tidak berubah ganda. ✅
+   - **Test Guard**:
+     - Release job yang sudah refunded → ditolak (400). ✅
+
+4. **Audit Konsistensi Saldo Dompet** ✅ SELESAI:
+   - Sinkronisasi kolom `saldo` dan `balance` di tabel `users_bisa` diverifikasi setelah setiap transaksi. ✅
+
+---
+
+## 🎯 Ringkasan Status Semua Fase
+
+| Fase | Komponen | Status | Bukti/Verifikasi |
+|------|----------|--------|------------------|
+| **FASE 1** | Midtrans Snap Payment | ✅ Selesai | Pembayaran online via snap_token berfungsi (status 200 + response valid). |
+| **FASE 2** | Server-Side Escrow | ✅ Selesai | Endpoint `/api/order/action` deployed, tested release/refund/idempotency, saldo verified. |
+| **FASE 3** | Photo Compression | ✅ Selesai (LINT/TYPECHECK CLEAN) | Helper `compressImageDetailed` di `src/lib/imageCompression.ts`. Semua titik upload (chat, delivery, posting, avatar, galeri, portofolio, KYC) pakai helper terpusat. Tidak ada lagi penolakan foto besar. |
+| **FASE 4** | Dispute Resolution + Chat Archive | ✅ Selesai (LINT/TYPECHECK CLEAN) | DB: kolom dispute_* + enum `dalam_sengketa` + archived_by_*. Backend: `POST /api/order/action` (action dispute) + `/api/admin/disputes` (GET/POST resolve). Mobile: tombol sengketa Mitra + Klien, modal alasan, banner `dalam_sengketa`, inbox tab Arsip + toggle arsip per-chat. Admin: halaman `/admin/disputes` dengan filter Menunggu/Selesai/Semua, tombol Rilis Dana / Refund. |
+
 
 
 ---
 
-### 🖼️ FASE 3: Kompresi Foto Otomatis Agresif (Semua Titik Upload)
+### 🖼️ FASE 3: Kompresi Foto Otomatis Agresif (Semua Titik Upload) — ✅ SELESAI
 **Target Utama:** Menjamin semua foto yang diunggah dikompresi otomatis tanpa batas ukuran awal, hemat bandwidth & storage Supabase.
 
 1. **Standarisasi Kompresi**:
-   - Titik upload: Chat gambar, Lampiran Hasil Kerja (`[DELIVERY]`), Lampiran Posting Pekerjaan, dan Foto KYC.
+   - Titik upload: Chat gambar, Lampiran Hasil Kerja (`[DELIVERY]`), Lampiran Posting Pekerjaan, Foto KYC, Avatar, Galeri, Portofolio.
    - Otomatis kompres:
-     - Mengubah resolusi maksimal (misal maks lebar/tinggi 1280px).
-     - Kualitas JPEG 0.65 - 0.75 (penurunan ukuran file 70% - 90% dengan ketajaman visual tetap jernih).
-     - Menghindari error memori pada file kamera resolusi tinggi (>15MB).
+     - Resolusi maksimal 1280px sisi terpanjang (rasio aspek dijaga otomatis oleh `expo-image-manipulator`).
+     - Kualitas JPEG 0.7 (penurunan ukuran file 70-90% dengan ketajaman visual tetap jernih).
+     - Tidak ada lagi penolakan berdasarkan ukuran file — foto berapa pun tetap dikompresi.
+     - Kegagalan kompresi fallback ke file asli (upload tidak terhenti).
 2. **Penolakan Dokumen Non-Foto**:
    - Jika pengguna membutuhkan pengiriman dokumen (PDF, CAD, ZIP, dll.), sediakan instruksi cepat di UI untuk menaruh tautan cloud (Google Drive/Dropbox/Onedrive).
 
+**File yang diubah:**
+- `src/lib/imageCompression.ts` — rewrite helper terpusat.
+- `src/hooks/useEditProfilMobileLogic.ts` — avatar, kamera, galeri, portofolio.
+- `src/hooks/usePostingMobileLogic.ts` — foto posting.
+- `src/hooks/useChatLogic.ts` — chat image + delivery image. Hapus `base64: true` di picker (hemat memori).
+- `app/(auth)/daftar.tsx` — KTP & selfie.
+- `app/p/aktivitas/[id].tsx` — delivery image. Hapus `base64: true` di picker.
+
 ---
 
-### ⚖️ FASE 4: Alur Sengketa (Dispute Resolution) & Fitur Arsip Chat
+### ⚖️ FASE 4: Alur Sengketa (Dispute Resolution) & Fitur Arsip Chat — ✅ SELESAI
 **Target Utama:** Memberikan solusi formal jika terjadi perselisihan antara Klien dan Mitra.
 
-1. **Alur Sengketa (Dispute)**:
-   - Tombol **"Ajukan Komplain / Sengketa"** muncul jika:
-     - Permintaan revisi telah mencapai batas maksimal (`revision_count >= max_revision`).
-     - Mitra menolak pengajuan pembatalan Klien.
-   - Status pekerjaan berpindah ke: `dalam_sengketa`.
-   - Admin di `bisa-admin` mendapatkan notifikasi sengketa di menu CS / Keuangan untuk meninjau bukti chat dan memutuskan:
-     - *Admin Force Release* (dana ke Mitra jika pekerjaan valid).
-     - *Admin Force Refund* (dana kembali ke Klien jika Mitra wanprestasi).
-2. **Fitur Arsip Chat (Archive)**:
-   - Tambahkan status `is_archived_by_client` / `is_archived_by_mitra`.
-   - Pisahkan tab di Inbox Chat: **"Semua Chat"** dan **"Arsip"**.
-   - Menghindari hapus permanen agar histori percakapan transaksi tetap tersimpan sebagai bukti hukum.
+1. **Perubahan Database** ✅:
+   - `pekerjaan_bisa`: kolom `dispute_reason` (text), `dispute_at` (timestamp), `dispute_status` (default `pending`), `dispute_resolved_by_admin_id` (int).
+   - Enum status ditambahkan `dalam_sengketa`.
+   - `conversations`: kolom `archived_by_client` & `archived_by_mitra` (boolean default false).
+
+2. **Backend (`bisa-admin`)** ✅:
+   - `POST /api/order/action` menerima `action: "dispute"` — validasi user/role, guard status selesai/dibatalkan, set status `dalam_sengketa` & log admin.
+   - `GET /api/admin/disputes?status=pending|resolved|all` — list sengketa dengan data pelanggan & mitra.
+   - `POST /api/admin/disputes` — resolve dengan `decision: "release"` atau `"refund"`, hitung fee, update saldo, catat transaksi.
+
+3. **Mobile (`bisa-mobile`)** ✅:
+   - `src/lib/payment.ts`: fungsi `submitOrderDispute(jobId, reason)` memanggil `/api/order/action` dengan Bearer token.
+   - `app/p/aktivitas/[id].tsx`: banner sengketa aktif, tombol "Sengketa" saat sedang dikerjakan, modal alasan.
+   - `app/c/aktivitas.tsx` + `AktivitasJobCard`: tombol "Ajukan Sengketa" muncul saat hasil kerja dikirim (`menunggu_konfirmasi_selesai`), badge `dalam_sengketa`, modal alasan.
+   - `src/lib/chatInbox.ts`: `fetchInboxChats(isMitra, archivedOnly)` + `toggleArchiveConversation()`.
+   - `app/c/chat.tsx` & `app/p/chat.tsx`: tab "Semua" / "Arsip", toggle archive via long-press atau icon.
+
+4. **Admin Dashboard** ✅:
+   - Halaman baru `/admin/disputes` dengan filter Menunggu / Selesai / Semua.
+   - Tombol "Rilis Dana ke Mitra" dan "Refund ke Pelanggan" (termasuk COD cancel) dengan catatan keputusan.
+   - Menu navigasi "Sengketa & Dispute" di sidebar.
 
 ---
 

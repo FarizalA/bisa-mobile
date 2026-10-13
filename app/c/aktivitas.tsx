@@ -28,6 +28,7 @@ import {
   releaseEscrowPayout,
   requestOrderCancellation,
   checkAndProcessExpiredCancellations,
+  submitOrderDispute,
 } from "../../src/lib/payment";
 import { AktivitasSkeleton } from "../../src/components/SkeletonLoader";
 import { checkAndSyncMidtransStatus } from "../../src/lib/midtransDirect";
@@ -52,6 +53,14 @@ export default function AktivitasPage() {
 
   // Modal Pengajuan Pembatalan oleh Klien (Mitra diberi 24 jam)
   const [cancelModal, setCancelModal] = useState<{ visible: boolean; job: any; reason: string; loading: boolean }>({
+    visible: false,
+    job: null,
+    reason: "",
+    loading: false,
+  });
+
+  // Modal Ajukan Sengketa (Fase 4)
+  const [disputeModal, setDisputeModal] = useState<{ visible: boolean; job: any; reason: string; loading: boolean }>({
     visible: false,
     job: null,
     reason: "",
@@ -465,6 +474,33 @@ export default function AktivitasPage() {
     }
   };
 
+  // F. Ajukan Sengketa ke Admin (Fase 4) — saat hasil kerja tidak sesuai
+  const handleDispute = (job: any) => {
+    setDisputeModal({ visible: true, job, reason: "", loading: false });
+  };
+
+  const handleSubmitDispute = async () => {
+    if (!disputeModal.job) return;
+    const reason = disputeModal.reason.trim();
+    if (reason.length < 10) {
+      Alert.alert("Alasan Terlalu Singkat", "Mohon jelaskan sengketa minimal 10 karakter agar Admin bisa meninjau.");
+      return;
+    }
+    setDisputeModal((p) => ({ ...p, loading: true }));
+    try {
+      await submitOrderDispute(disputeModal.job.id, reason);
+      setDisputeModal({ visible: false, job: null, reason: "", loading: false });
+      Alert.alert(
+        "Sengketa Diajukan",
+        "Admin akan meninjau bukti & chat Anda. Dana ditahan sampai keputusan: released ke Mitra atau refund ke Saldo Anda."
+      );
+      if (user?.id) fetchMyJobs(user.id, pageLimit);
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message || "Gagal mengajukan sengketa.");
+      setDisputeModal((p) => ({ ...p, loading: false }));
+    }
+  };
+
   // E. Perpanjang Waktu Posting 24 Jam — custom modal
   const handlePerpanjangWaktu = (job: any) => {
     setConfirmSheet({
@@ -596,6 +632,8 @@ export default function AktivitasPage() {
                   onViewCandidates={(id) => router.push(`/c/pekerjaan/${id}/kandidat` as any)}
                   onOpenInvoice={(j) => router.push(`/invoice/${j.id}` as any)}
                   onOpenMitraProfile={(mitraId) => router.push(`/p/profil/${mitraId}` as any)}
+                  onDispute={handleDispute}
+                  disputeReason={(job as any).dispute_reason ?? null}
                 />
               ))}
 
@@ -697,6 +735,88 @@ export default function AktivitasPage() {
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <Text style={{ fontSize: 12, fontWeight: "900", color: "#ffffff" }}>Kirim Pengajuan</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Ajukan Sengketa Klien (Fase 4) */}
+      <Modal
+        visible={disputeModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!disputeModal.loading) setDisputeModal((p) => ({ ...p, visible: false }));
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", paddingHorizontal: 20 }}>
+          <View style={{ backgroundColor: "#ffffff", borderRadius: 24, padding: 20, width: "100%", maxWidth: 360, gap: 14, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 16, elevation: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "900", color: "#111827" }}>Ajukan Sengketa</Text>
+                <Text style={{ fontSize: 10, color: "#6b7280" }}>Ditinjau Admin BISA</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDisputeModal((p) => ({ ...p, visible: false }))}
+                disabled={disputeModal.loading}
+                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: "#fef3c7", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#fbbf24" }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "bold", color: "#92400e" }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, color: "#4b5563", lineHeight: 18 }}>
+              Hasil kerja tidak sesuai? Ajukan sengketa ke Admin. Dana akan <Text style={{ fontWeight: "900", color: "#92400e" }}>ditahan</Text> sampai Admin memutuskan: rilis ke Mitra atau refund ke Saldo Anda. Diskusikan dulu via Chat jika masih bisa.
+            </Text>
+
+            <View style={{ backgroundColor: "#fef3c7", borderWidth: 1, borderColor: "#fbbf24", borderRadius: 12, padding: 10, flexDirection: "row", gap: 8 }}>
+              <Text style={{ fontSize: 10, color: "#92400e", flex: 1, lineHeight: 15 }}>
+                Pastikan chat & bukti lengkap. Admin akan meninjau bukti sebelum memutuskan.
+              </Text>
+            </View>
+
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: "#374151" }}>Alasan Sengketa (min. 10 karakter):</Text>
+              <TextInput
+                value={disputeModal.reason}
+                onChangeText={(text) => setDisputeModal((p) => ({ ...p, reason: text }))}
+                placeholder="Jelaskan kronologi & alasan sengketa..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={4}
+                style={{
+                  backgroundColor: "#f9fafb",
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  borderRadius: 12,
+                  padding: 10,
+                  fontSize: 12,
+                  color: "#111827",
+                  minHeight: 90,
+                  textAlignVertical: "top",
+                }}
+              />
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+              <TouchableOpacity
+                onPress={() => setDisputeModal((p) => ({ ...p, visible: false }))}
+                disabled={disputeModal.loading}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 999, borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "700", color: "#4b5563" }}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSubmitDispute}
+                disabled={disputeModal.loading}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 999, backgroundColor: "#d97706", alignItems: "center", justifyContent: "center" }}
+              >
+                {disputeModal.loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ fontSize: 12, fontWeight: "900", color: "#ffffff" }}>Ajukan Sengketa</Text>
                 )}
               </TouchableOpacity>
             </View>

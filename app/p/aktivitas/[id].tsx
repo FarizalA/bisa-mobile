@@ -21,13 +21,13 @@ import {
   CheckCircle2,
   Send,
   Wallet,
-  Timer,
   FileText,
   Camera,
   X,
   Link2,
   Handshake,
   Clock,
+  Timer,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -38,10 +38,11 @@ import {
   processOrderRefund,
   respondOrderCancellation,
   checkAndProcessExpiredCancellations,
+  submitOrderDispute,
 } from "../../../src/lib/payment";
 import { fmtDate } from "../../../src/lib/invoice";
 import { safeBack } from "@/lib/navigation";
-import { compressImage, compressImageWithBase64, base64ToUint8Array } from "../../../src/lib/imageCompression";
+import { compressImageDetailed, compressImageWithBase64, base64ToUint8Array } from "../../../src/lib/imageCompression";
 import { checkAndSyncMidtransStatus } from "../../../src/lib/midtransDirect";
 
 interface JobDetail {
@@ -70,6 +71,9 @@ interface JobDetail {
   cancel_requested_at?: string | null;
   cancel_reason?: string | null;
   alasan_penolakan?: string | null;
+  dispute_reason?: string | null;
+  dispute_at?: string | null;
+  dispute_status?: string | null;
   pelanggan?: {
     id: number;
     name: string;
@@ -108,6 +112,11 @@ export default function MitraOrderDetailPage() {
   const [rejectCancelReason, setRejectCancelReason] = useState("");
   const [cancelResponding, setCancelResponding] = useState(false);
   const [cancelCountdown, setCancelCountdown] = useState<string | null>(null);
+
+  // Dispute (sengketa) — Fase 4
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeActing, setDisputeActing] = useState(false);
 
   // Nice popup (ganti window.alert jelek localhost:8081 says)
   const [alertInfo, setAlertInfo] = useState<{ show: boolean; title: string; message: string; variant: "success" | "error" | "info" }>({
@@ -432,18 +441,13 @@ export default function MitraOrderDetailPage() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.8,
-        base64: true,
       });
       if (!res.canceled && res.assets[0]?.uri) {
         let uri = res.assets[0].uri;
         let base64 = res.assets[0].base64;
-        try {
-          const comp = await compressImageWithBase64(uri);
-          uri = comp.uri;
-          if (comp.base64) base64 = comp.base64;
-        } catch (error) {
-          console.error("Gagal kompresi foto:", error);
-        }
+        const comp = await compressImageWithBase64(uri);
+        uri = comp.uri;
+        if (comp.base64) base64 = comp.base64;
         setDeliveryImageUri(uri);
         (globalThis as any)._deliveryBase64 = base64;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -642,6 +646,28 @@ export default function MitraOrderDetailPage() {
     }
   };
 
+  // Fase 4: ajukan sengketa ke admin
+  const handleSubmitDispute = async () => {
+    if (!job) return;
+    const reason = disputeReason.trim();
+    if (reason.length < 10) {
+      showNiceAlert("Alasan Kurang", "Mohon jelaskan sengketa minimal 10 karakter.", "error");
+      return;
+    }
+    setDisputeActing(true);
+    try {
+      await submitOrderDispute(job.id, reason);
+      setShowDisputeModal(false);
+      setDisputeReason("");
+      showNiceAlert("Sengketa Diajukan", "Admin akan meninjau bukti & chat. Dana ditahan sampai keputusan.", "info");
+      await fetchJobDetail();
+    } catch (e: any) {
+      showNiceAlert("Gagal", e.message || "Gagal mengajukan sengketa", "error");
+    } finally {
+      setDisputeActing(false);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-[#F8FAF9] items-center justify-center">
@@ -784,6 +810,27 @@ export default function MitraOrderDetailPage() {
               ))}
             </View>
           </View>
+
+          {/* Banner Sengketa Aktif (Fase 4) */}
+          {job.status === "dalam_sengketa" && (
+            <View className="bg-amber-50 rounded-2xl p-4 border border-amber-300 shadow-xs flex-col gap-2.5">
+              <View className="flex-row items-center gap-2">
+                <View className="w-8 h-8 rounded-full bg-amber-100 items-center justify-center">
+                  <FileText size={16} color="#b45309" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-black text-amber-900">Pesanan Dalam Sengketa</Text>
+                  <Text className="text-[10px] text-amber-700">Dana ditahan. Menunggu keputusan Admin setelah meninjau bukti & chat.</Text>
+                </View>
+              </View>
+              {job.dispute_reason ? (
+                <View className="bg-white rounded-xl p-3 border border-amber-200">
+                  <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Alasan Sengketa:</Text>
+                  <Text className="text-xs font-medium text-gray-800 italic">"{job.dispute_reason}"</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
 
           {/* Banner Pengajuan Pembatalan oleh Klien */}
           {isPendingCancel && (
@@ -983,6 +1030,13 @@ export default function MitraOrderDetailPage() {
               >
                 <Handshake size={14} color="#b91c1c" />
                 <Text className="text-xs font-bold text-red-700">Batal Sepakat</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowDisputeModal(true)}
+                className="px-3.5 py-3 rounded-full border border-amber-200 bg-amber-50 items-center justify-center flex-row gap-1"
+              >
+                <FileText size={14} color="#b45309" />
+                <Text className="text-xs font-bold text-amber-800">Sengketa</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleOpenDirectChat} className="px-3.5 py-3 rounded-full border border-gray-200 bg-white items-center justify-center flex-row gap-1">
                 <MessageSquare size={14} color="#374151" />
@@ -1307,6 +1361,58 @@ export default function MitraOrderDetailPage() {
               </TouchableOpacity>
               <TouchableOpacity onPress={handleMitraRejectCancel} disabled={cancelResponding} className="flex-1 py-3 rounded-full bg-red-600 items-center justify-center shadow-md">
                 {cancelResponding ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-xs font-black text-white">Tolak Pengajuan</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Ajukan Sengketa (Fase 4) */}
+      <Modal visible={showDisputeModal} transparent animationType="fade" onRequestClose={() => setShowDisputeModal(false)}>
+        <View className="flex-1 bg-black/50 items-center justify-center px-4">
+          <View className="bg-white rounded-[24px] w-full max-w-sm p-5 gap-3.5">
+            <View className="flex-row items-center justify-between border-b border-gray-100 pb-2.5">
+              <View className="flex-row items-center gap-2">
+                <View className="w-8 h-8 rounded-full bg-amber-100 items-center justify-center">
+                  <FileText size={16} color="#b45309" />
+                </View>
+                <View>
+                  <Text className="font-black text-gray-900 text-sm">Ajukan Sengketa</Text>
+                  <Text className="text-[10px] text-gray-500">Ditinjau Admin BISA</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setShowDisputeModal(false)} className="w-7 h-7 rounded-full bg-gray-100 items-center justify-center">
+                <X size={15} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-xs text-gray-600 leading-relaxed">
+              Sengketa diajukan ke tim Admin. Dana pesanan akan <Text className="font-bold">ditahan</Text> sampai Admin memutuskan: released untuk Mitra atau refund untuk Pelanggan. Pastikan chat & bukti sudah lengkap.
+            </Text>
+
+            <View className="bg-amber-50 rounded-xl p-3 border border-amber-200 flex-row gap-2">
+              <FileText size={14} color="#b45309" />
+              <Text className="text-[10px] text-amber-800 flex-1 leading-relaxed">
+                Diskusikan dulu lewat Chat atau ajukan Batal Sepakat bila masih bisa. Sengketa dipakai saat tidak ada kesepakatan.
+              </Text>
+            </View>
+
+            <TextInput
+              value={disputeReason}
+              onChangeText={setDisputeReason}
+              placeholder="Jelaskan kronologi & alasan sengketa (min. 10 karakter)..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={4}
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-900 min-h-[95px]"
+            />
+
+            <View className="flex-row gap-2 mt-1">
+              <TouchableOpacity onPress={() => setShowDisputeModal(false)} className="flex-1 py-3 rounded-full border border-gray-200 items-center justify-center">
+                <Text className="text-xs font-bold text-gray-700">Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSubmitDispute} disabled={disputeActing} className="flex-1 py-3 rounded-full bg-amber-600 items-center justify-center shadow-md">
+                {disputeActing ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-xs font-black text-white">Ajukan</Text>}
               </TouchableOpacity>
             </View>
           </View>

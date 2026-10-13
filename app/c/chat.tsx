@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, MessageSquare } from "lucide-react-native";
 import { safeBack } from "../../src/lib/navigation";
-import { fetchInboxChats, ChatInboxItem } from "../../src/lib/chatInbox";
+import { fetchInboxChats, toggleArchiveConversation, ChatInboxItem } from "../../src/lib/chatInbox";
 import InboxListView from "../../src/components/chat/InboxListView";
+import InboxTabBar from "../../src/components/chat/InboxTabBar";
 
 export default function ClientInboxPage() {
   const router = useRouter();
   const [chats, setChats] = useState<ChatInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "archive">("all");
+  const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const loadChats = useCallback(async () => {
     try {
-      const data = await fetchInboxChats(false);
+      const data = await fetchInboxChats(false, activeTab === "archive");
       setChats(data);
     } catch (e) {
       console.error(e);
@@ -23,15 +26,33 @@ export default function ClientInboxPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
+    setLoading(true);
     loadChats();
   }, [loadChats]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadChats();
+  };
+
+  const handleArchiveToggle = useCallback(async (conversationId: string) => {
+    setArchivingId(conversationId);
+    const res = await toggleArchiveConversation(conversationId, false);
+    setArchivingId(null);
+    if (!res.success) {
+      Alert.alert("Gagal", "Gagal mengubah status arsip. Coba lagi.");
+      return;
+    }
+    // Hilangkan dari list saat ini (pindah tab)
+    setChats((prev) => prev.filter((c) => String(c.conversation_id) !== conversationId));
+  }, []);
+
+  const handleTabChange = (tab: "all" | "archive") => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
   };
 
   return (
@@ -52,12 +73,17 @@ export default function ClientInboxPage() {
         </View>
       </View>
 
+      <InboxTabBar activeTab={activeTab} onChange={handleTabChange} accent="#FF6B00" />
+
       <InboxListView
         role="client"
         chats={chats}
         loading={loading}
         refreshing={refreshing}
         onRefresh={onRefresh}
+        activeTab={activeTab}
+        onArchiveToggle={handleArchiveToggle}
+        archivingId={archivingId}
       />
     </SafeAreaView>
   );

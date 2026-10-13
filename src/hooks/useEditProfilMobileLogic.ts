@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import { getStoredUser, setStoredUser } from "../lib/user-storage";
-import { compressImage } from "../lib/imageCompression";
+import { compressImageDetailed } from "../lib/imageCompression";
 import { safeBack } from "@/lib/navigation";
 import { usePopup } from "../components/PopupProvider.native";
 
@@ -177,12 +177,9 @@ export function useEditProfilMobileLogic() {
       }
       if (picked.canceled || !picked.assets?.[0]) return;
       let uri = picked.assets[0].uri;
-      if (picked.assets[0].fileSize && picked.assets[0].fileSize > 5 * 1024 * 1024) {
-        showPopup({ title: "File Terlalu Besar", message: "Ukuran foto maksimal adalah 5 MB.", type: "warning" });
-        return;
-      }
       setUploadingImage(true);
-      uri = await compressImage(uri);
+      const comp = await compressImageDetailed(uri);
+      uri = comp.uri;
       const ext = extFromUri(uri);
       const mime = mimeFromExt(ext);
       const ab = await uriToArrayBuffer(uri);
@@ -212,7 +209,8 @@ export function useEditProfilMobileLogic() {
       if (res.canceled || !res.assets?.[0]) return;
       let uri = res.assets[0].uri;
       setUploadingImage(true);
-      uri = await compressImage(uri);
+      const comp = await compressImageDetailed(uri);
+      uri = comp.uri;
       const ext = extFromUri(uri);
       const mime = mimeFromExt(ext);
       const ab = await uriToArrayBuffer(uri);
@@ -249,11 +247,8 @@ export function useEditProfilMobileLogic() {
       let added = 0;
       for (const a of res.assets) {
         if (gallery.length + added >= 5) break;
-        if ((a.fileSize || 0) > 5 * 1024 * 1024) {
-          showPopup({ title: "File Melebihi Limit", message: `${a.fileName || "Foto"} melebihi 5 MB dan dilewati.`, type: "warning" });
-          continue;
-        }
-        const uri = await compressImage(a.uri);
+        const comp = await compressImageDetailed(a.uri);
+        const uri = comp.uri;
         const ext = extFromUri(uri);
         const mime = mimeFromExt(ext);
         const ab = await uriToArrayBuffer(uri);
@@ -366,7 +361,8 @@ export function useEditProfilMobileLogic() {
     try {
       const uploadedUrls: string[] = [];
       for (let i = 0; i < pendingPortfolioUris.length; i++) {
-        const uri = await compressImage(pendingPortfolioUris[i]);
+        const comp = await compressImageDetailed(pendingPortfolioUris[i]);
+        const uri = comp.uri;
         const ext = extFromUri(uri);
         const mime = mimeFromExt(ext);
         const ab = await uriToArrayBuffer(uri);

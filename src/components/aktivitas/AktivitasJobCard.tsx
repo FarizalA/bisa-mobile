@@ -14,6 +14,7 @@ import {
   Pencil,
   Target,
   Handshake,
+  Scale,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { formatRupiah, calculatePaymentBreakdown } from "../../lib/payment";
@@ -55,6 +56,8 @@ interface AktivitasJobCardProps {
   onViewCandidates: (jobId: number) => void;
   onOpenInvoice: (job: JobItem) => void;
   onOpenMitraProfile: (mitraId: string) => void;
+  onDispute?: (job: JobItem) => void;
+  disputeReason?: string | null;
 }
 
 function PingDot() {
@@ -94,6 +97,8 @@ export default function AktivitasJobCard({
   onViewCandidates,
   onOpenInvoice,
   onOpenMitraProfile,
+  onDispute,
+  disputeReason,
 }: AktivitasJobCardProps) {
   useWindowDimensions();
 
@@ -146,6 +151,8 @@ export default function AktivitasJobCard({
             <View className="bg-emerald-100 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-emerald-200"><CheckCircle2 size={11} color="#047857" /><Text className="text-[10px] font-bold text-emerald-800">Selesai & Lunas</Text></View>
           ) : job.status === "dibatalkan" ? (
             <View className="bg-red-100 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-red-100"><XCircle size={11} color="#b91c1c" /><Text className="text-[10px] font-bold text-red-700">Dibatalkan</Text></View>
+          ) : job.status === "dalam_sengketa" ? (
+            <View className="bg-amber-100 px-2.5 py-1 rounded-full flex-row items-center gap-1 border border-amber-200"><Scale size={11} color="#b45309" /><Text className="text-[10px] font-bold text-amber-800">Dalam Sengketa</Text></View>
           ) : job.status === "menunggu_persetujuan_batal" ? (
             <View className="bg-amber-100 px-2.5 py-1 rounded-full border border-amber-200 flex-row items-center gap-1"><Clock size={11} color="#b45309" /><Text className="text-[10px] font-bold text-amber-800">Menunggu Respon Mitra</Text></View>
           ) : (
@@ -270,7 +277,26 @@ export default function AktivitasJobCard({
         </View>
       )}
 
-      {(job.status === "sedang_dikerjakan" || job.status === "menunggu_konfirmasi_selesai" || isPaidEscrow) && job.status !== "selesai" && job.status !== "menunggu_persetujuan_batal" && (
+      {/* Banner Sengketa Aktif (Fase 4) */}
+      {job.status === "dalam_sengketa" && (
+        <View className="bg-amber-50 border border-amber-300 rounded-2xl px-3 py-3 flex-col gap-2">
+          <View className="flex-row items-center gap-2">
+            <Scale size={15} color="#b45309" />
+            <Text className="text-xs font-black text-amber-900">Pesanan Dalam Sengketa</Text>
+          </View>
+          <Text className="text-[11px] text-amber-800 leading-relaxed">
+            Dana ditahan. Admin BISA sedang meninjau bukti & chat. Keputusan: dana ke Mitra (selesai) atau refund ke Saldo Anda.
+          </Text>
+          {disputeReason ? (
+            <View className="bg-white rounded-xl px-3 py-2 border border-amber-200">
+              <Text className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-0.5">Alasan</Text>
+              <Text className="text-[11px] font-medium text-gray-800 italic">"{disputeReason}"</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
+      {(job.status === "sedang_dikerjakan" || job.status === "menunggu_konfirmasi_selesai" || isPaidEscrow) && job.status !== "selesai" && job.status !== "menunggu_persetujuan_batal" && job.status !== "dalam_sengketa" && (
         <View className="flex-col gap-2">
           <TouchableOpacity
             onPress={() => (isWorkingOver24h ? onCancelJob(job.id) : onMutualCancel(job))}
@@ -280,6 +306,16 @@ export default function AktivitasJobCard({
             {isWorkingOver24h ? <XCircle size={15} color="#b91c1c" /> : <Handshake size={15} color="#b91c1c" />}
             <Text className="text-xs font-black text-red-700">{isWorkingOver24h ? "Batalkan & Refund" : "Batal Sepakat"}</Text>
           </TouchableOpacity>
+          {job.status === "menunggu_konfirmasi_selesai" && onDispute ? (
+            <TouchableOpacity
+              onPress={() => onDispute(job)}
+              activeOpacity={0.88}
+              className="w-full py-2.5 rounded-xl bg-amber-50 border border-amber-200 items-center justify-center flex-row gap-1.5"
+            >
+              <Scale size={15} color="#b45309" />
+              <Text className="text-xs font-black text-amber-800">Hasil Tidak Sesuai? Ajukan Sengketa</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => onReleaseFunds(job)}
             disabled={releasingJobId === job.id}
