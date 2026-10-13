@@ -4,10 +4,9 @@ import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { validateEmail, validatePassword } from "../lib/validations";
 import { setStoredUser } from "../lib/user-storage";
+import { setBisaToken } from "../lib/bisa-token";
 
-function normalizePhone(p: string) {
-  return p.replace(/\s+/g, "").replace(/[^0-9]/g, "").replace(/^0/, "").replace(/^62/, "");
-}
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "https://bisa-admin.vercel.app").replace(/\/$/, "");
 
 export function useAuthForm(mode: "login" | "daftar") {
   const router = useRouter();
@@ -30,40 +29,22 @@ export function useAuthForm(mode: "login" | "daftar") {
       if (mode === "login") {
         const input = email.trim();
 
-        // 1. Coba via email (case-insensitive) — sama kayak web login/page.tsx
-        let { data: users, error } = await supabase
-          .from("users_bisa")
-          .select("*")
-          .ilike("email", input)
-          .order("id", { ascending: false })
-          .limit(1);
-
-        // 2. Jika tidak ketemu via email, cari via nomor HP
-        if ((!users || users.length === 0) && !error) {
-          const { data: allUsers } = await supabase.from("users_bisa").select("*").limit(1000);
-          if (allUsers) {
-            const target = normalizePhone(input);
-            const matched = allUsers.filter((u: any) => u.phone && normalizePhone(u.phone) === target);
-            if (matched.length > 0) users = matched;
-          }
+        // Login via backend: verifikasi + terbitkan token BISA (HS256).
+        // Client tidak menyimpan logika password sendiri; backend yang memutuskan.
+        const res = await fetch(`${API_URL}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: input, password }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || "Email / No HP atau kata sandi salah.");
         }
 
-        if (error) throw new Error("Gagal konek server: " + error.message);
-        if (!users || users.length === 0) throw new Error("Akun dengan email / No HP tersebut tidak ditemukan.");
+        // Simpan token BISA — dipakai sebagai Bearer di semua endpoint escrow.
+        if (data.token) await setBisaToken(data.token);
 
-        const user = (users as any[])[0];
-        if (user.password !== password) throw new Error("Kata sandi salah. Silakan coba lagi.");
-
-        // Cek banned / dibekukan — sama kayak web
-        if (user.kyc_status === "Dibekukan" || user.is_banned || user.status === "Dibekukan" || user.banned_at) {
-          const safe: any = { ...user };
-          delete safe.password;
-          await setStoredUser(safe);
-          router.replace("/(auth)/login" as any);
-          Alert.alert("Akun dibekukan", "Akun kamu sedang dibekukan. Hubungi admin BISA.");
-          return;
-        }
-
+        const user = data.user as any;
         const safe: any = { ...user };
         delete safe.password;
         await setStoredUser(safe);
