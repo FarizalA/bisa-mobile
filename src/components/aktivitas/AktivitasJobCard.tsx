@@ -102,7 +102,11 @@ export default function AktivitasJobCard({
 }: AktivitasJobCardProps) {
   useWindowDimensions();
 
-  const isPaidEscrow = Boolean(job.agreed_price && job.payment_status === "escrow_held");
+  // Escrow dianggap tertahan bila status bayar sukses (Midtrans bisa tulis beberapa nilai).
+  const PAID_STATUSES = ["escrow_held", "paid", "settlement", "capture", "authorized"];
+  const isPaidEscrow = Boolean(
+    job.agreed_price && job.payment_status && PAID_STATUSES.includes(String(job.payment_status))
+  );
   const rawAgreed = job.agreed_price || parseInt(String(job.budget || "").replace(/\D/g, "") || "0", 10);
   const agreedPrice = isNaN(rawAgreed) ? 0 : rawAgreed;
   const breakdown = agreedPrice > 0 ? calculatePaymentBreakdown(agreedPrice) : null;

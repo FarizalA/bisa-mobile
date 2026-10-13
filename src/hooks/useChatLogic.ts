@@ -537,6 +537,21 @@ export function useChatLogic(conversationId: string) {
       setPayAgreedPrice(priceNum > 0 ? priceNum : Number((budgetStr || "").replace(/\D/g, "")) || 0);
       setShowPaySheet(true);
     } else if (action === "deliver") {
+      // Mitra hanya boleh kirim hasil jika escrow sudah dibayar (bukan COD)
+      const j = jobStatusMap[jobId];
+      const ji = jobInfo;
+      const isPaid = ji?.payment_status === "escrow_held" || ji?.payment_status === "paid" || ji?.payment_status === "settlement" || ji?.payment_status === "capture";
+      const isCOD = ji?.payment_method === "COD";
+      if (!isPaid && !isCOD) {
+        try {
+          showPopup({
+            title: "Belum Bayar",
+            message: "Pelanggan belum menyelesaikan pembayaran. Silakan tunggu hingga dana escrow masuk.",
+            type: "info",
+          });
+        } catch {}
+        return;
+      }
       setDeliveryJobId(jobId);
       setShowDeliveryModal(true);
     } else if (action === "revision") {
@@ -719,6 +734,24 @@ export function useChatLogic(conversationId: string) {
       }
       return;
     } else if (action === "accept" || action === "accept_final") {
+      // KLIEN HANYA BOLEH TERIMA JIKA SUDAH BAYAR (bukan COD)
+      {
+        const ji = jobInfo;
+        const isPaid = ji?.payment_status === "escrow_held" || ji?.payment_status === "paid" || ji?.payment_status === "settlement" || ji?.payment_status === "capture";
+        const isCOD = ji?.payment_method === "COD";
+        // accept_final adalah Klien klik Terima → wajib sudah dibayar
+        if (action === "accept_final" && !isPaid && !isCOD) {
+          try {
+            showPopup({
+              title: "Belum Bayar",
+              message: "Selesaikan pembayaran escrow terlebih dahulu sebelum konfirmasi pesanan.",
+              type: "info",
+            });
+          } catch {}
+          return;
+        }
+      }
+
       // Safety routing jika dipanggil oleh Mitra saat status masih menunggu konfirmasi mitra
       const isPendingApproval = jobInfo?.status === "menunggu_konfirmasi_mitra";
       const isMitraMe = Number(jobInfo?.mitra_id) === Number(myUserId);
