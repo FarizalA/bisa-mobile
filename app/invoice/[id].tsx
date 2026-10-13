@@ -30,8 +30,10 @@ import {
   paymentLabel,
   statusColorNative,
   resolveEffectivePaymentStatus,
+  buildOrderTimeline,
 } from "../../src/lib/invoice";
 import { calculatePaymentBreakdown } from "../../src/lib/payment";
+import { OrderTimeline } from "../../src/components/order/OrderTimeline";
 import { safeBack } from "@/lib/navigation";
 import { getStoredUser } from "../../src/lib/user-storage";
 
@@ -395,6 +397,15 @@ export default function InvoiceScreen() {
               {order.expires_at ? ` • Batas: ${fmtDate(order.expires_at)}` : ""}
             </Text>
           </View>
+        </View>
+
+        {/* TIMELINE HISTORI PESANAN (Fase 5) */}
+        <View className="bg-white rounded-3xl border border-gray-200 p-4 mb-6">
+          <View className="flex-row items-center gap-1.5 mb-3">
+            <Clock size={12} color="#9CA3AF" />
+            <Text className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">RIWAYAT PESANAN</Text>
+          </View>
+          <OrderTimeline steps={buildOrderTimeline({ ...order, status: order.job_status || order.status, job_status: order.job_status || order.status, mitra_id: order.mitra_id })} />
         </View>
 
         {/* BOTTOM ACTION */}

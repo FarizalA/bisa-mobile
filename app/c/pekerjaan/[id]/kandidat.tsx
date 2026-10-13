@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Modal, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Clock, Star, CheckCircle2, XCircle, X } from "lucide-react-native";
+import { ArrowLeft, Clock, Star, CheckCircle2, XCircle, X, MessageCircle } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase } from "../../../../src/lib/supabase";
 import { getStoredUser } from "../../../../src/lib/user-storage";
@@ -17,6 +17,7 @@ export default function KandidatMobilePage() {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [actingId, setActingId] = useState<number | null>(null);
+  const [chattingId, setChattingId] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<null | { title: string; message: string; confirmText: string; cancelText: string; onConfirm: () => void; danger?: boolean }>(null);
 
   useEffect(() => {
@@ -109,6 +110,39 @@ export default function KandidatMobilePage() {
         }
       },
     });
+  };
+
+  // Chat ke kandidat (Fase 5) — buat/ambil conversation lalu buka direct-chat
+  const handleChatKandidat = async (kandidat: any) => {
+    const mitraId = kandidat.mitra?.id ?? kandidat.mitra_id;
+    if (!mitraId || !user?.id) return;
+    setChattingId(kandidat.id);
+    try {
+      const { data: ex } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("client_id", user.id)
+        .eq("mitra_id", mitraId)
+        .eq("type", "direct")
+        .maybeSingle();
+      let cid: string | null = ex?.id || null;
+      if (!cid) {
+        const { data: nc, error: ncErr } = await supabase
+          .from("conversations")
+          .insert({ client_id: user.id, mitra_id: mitraId, job_id: Number(jobId), type: "direct", is_active: true })
+          .select("id")
+          .single();
+        if (ncErr) throw ncErr;
+        cid = nc?.id || null;
+      }
+      if (!cid) throw new Error("Gagal membuka chat");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      router.push(`/c/direct-chat/${cid}` as any);
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message || String(e));
+    } finally {
+      setChattingId(null);
+    }
   };
 
   const handleTolakKandidat = (kandidat: any) => {
@@ -204,13 +238,23 @@ export default function KandidatMobilePage() {
                   </View>
                 </TouchableOpacity>
                 {isMenunggu ? (
-                  <View className="flex-row gap-2.5">
-                    <TouchableOpacity disabled={actingId === kandidat.id} onPress={() => handleTolakKandidat(kandidat)} activeOpacity={0.85} className="flex-1 py-3 rounded-full bg-gray-100 items-center justify-center flex-row gap-1.5">
-                      {actingId === kandidat.id ? <ActivityIndicator size="small" color="#6b7280" /> : <><X size={16} color="#374151" /><Text className="text-sm font-bold text-gray-700">Tolak</Text></>}
+                  <View className="gap-2.5">
+                    <TouchableOpacity
+                      disabled={chattingId === kandidat.id}
+                      onPress={() => handleChatKandidat(kandidat)}
+                      activeOpacity={0.85}
+                      className="w-full py-2.5 rounded-full bg-orange-50 border border-orange-200 items-center justify-center flex-row gap-1.5"
+                    >
+                      {chattingId === kandidat.id ? <ActivityIndicator size="small" color="#FF6B00" /> : <><MessageCircle size={15} color="#FF6B00" /><Text className="text-xs font-bold text-[#FF6B00]">Tanya / Chat Kandidat</Text></>}
                     </TouchableOpacity>
-                    <TouchableOpacity disabled={actingId === kandidat.id} onPress={() => handlePilihKandidat(kandidat)} activeOpacity={0.85} className="flex-[2] py-3 rounded-full bg-[#FF6B00] items-center justify-center flex-row gap-1.5">
-                      {actingId === kandidat.id ? <ActivityIndicator color="#fff" /> : <><CheckCircle2 size={16} color="#fff" /><Text className="text-sm font-bold text-white">Pilih Mitra Ini</Text></>}
-                    </TouchableOpacity>
+                    <View className="flex-row gap-2.5">
+                      <TouchableOpacity disabled={actingId === kandidat.id} onPress={() => handleTolakKandidat(kandidat)} activeOpacity={0.85} className="flex-1 py-3 rounded-full bg-gray-100 items-center justify-center flex-row gap-1.5">
+                        {actingId === kandidat.id ? <ActivityIndicator size="small" color="#6b7280" /> : <><X size={16} color="#374151" /><Text className="text-sm font-bold text-gray-700">Tolak</Text></>}
+                      </TouchableOpacity>
+                      <TouchableOpacity disabled={actingId === kandidat.id} onPress={() => handlePilihKandidat(kandidat)} activeOpacity={0.85} className="flex-[2] py-3 rounded-full bg-[#FF6B00] items-center justify-center flex-row gap-1.5">
+                        {actingId === kandidat.id ? <ActivityIndicator color="#fff" /> : <><CheckCircle2 size={16} color="#fff" /><Text className="text-sm font-bold text-white">Pilih Mitra Ini</Text></>}
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : (
                   <View className={`py-2.5 rounded-full items-center border ${isDiterima ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200"}`}>

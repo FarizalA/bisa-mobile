@@ -155,18 +155,22 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 
 ---
 
-### 📊 FASE 5: Transparansi Rincian Biaya UI & Perbaikan Alur Pemesanan
+### 📊 FASE 5: Transparansi Rincian Biaya UI & Perbaikan Alur Pemesanan — ✅ SELESAI
 **Target Utama:** Menghilangkan kebingungan pengguna mengenai nominal pembayaran dan status pekerjaan.
 
-1. **Rincian Pembayaran (Payment Breakdown)**:
-   - Tampilkan rincian transparan pada Sheet Pembayaran (`showPaySheet`):
-     - Harga Jasa / Kesepakatan: `Rp xxx`
-     - Biaya Layanan Aplikasi: `Rp xxx`
-     - Biaya Penanganan Gateway: `Rp xxx`
-     - **Total Tagihan**: `Rp xxx`
-2. **Sempurnakan Halaman Kandidat & Detail Pekerjaan**:
-   - Opsi Klien untuk mengirim pesan tanya jawab langsung ke kandidat sebelum menekan tombol "Pilih Mitra Ini".
-   - Tampilkan timeline histori pesanan (Dibuat → Mitra Dipilih → Terbayar Escrow → Dikerjakan → Terkirim → Selesai).
+1. **Rincian Pembayaran (Payment Breakdown)** — ✅ SELESAI:
+   - `payAgreedPrice` state baru di `src/hooks/useChatLogic.ts` (di-derive dari `agreed_price`/`budget`) untuk rincian akurat.
+   - `app/c/direct-chat/[conversationId].tsx` — tambah card **Rincian Biaya** (Harga Jasa + Biaya Layanan + Biaya Gateway → **Total Tagihan**) via `calculatePaymentBreakdown` + `formatRupiah` di `showPaySheet`. Hanya klien yang punya pay sheet.
+   - `src/components/chat/ChatModalsNative.tsx` — `MobileOrderDetailModal` sudah punya rincian lengkap sejak Fase 3.
+2. **Sempurnakan Halaman Kandidat & Detail Pekerjaan** — ✅ SELESAI:
+   - `app/c/pekerjaan/[id]/kandidat.tsx` — tambah tombol **"Tanya / Chat Kandidat"** (oren-outline, di atas Tolak/Pilih) + `handleChatKandidat` (find-or-create `conversations` `type=direct`, lalu `router.push /c/direct-chat/{id}`).
+   - `src/lib/invoice.ts` — EXPORT baru `buildOrderTimeline(order) → TimelineStep[]` (Dibuat → Mitra Dipilih → Terbayar Escrow → Dikerjakan → Terkirim → Selesai), handle COD, cancelled, pending correctly.
+   - `src/components/order/OrderTimeline.tsx` — komponen baru (dot hijau pomodoro utk done, oren clock utk active, merah X utk cancelled + garis vertikal).
+   - `app/invoice/[id].tsx` — sisipkan card **Riwayat Pesanan** di bawah Rincian Biaya.
+   - `src/components/chat/ChatModalsNative.tsx` — sisipkan card **Riwayat Pesanan** yang sama di `MobileOrderDetailModal`.
+   - `app/c/direct-chat/[conversationId].tsx` — import `formatRupiah, calculatePaymentBreakdown` yg sebelumnya missing.
+
+**Yang tersisa:** Fase 6 — push notifications.
 
 ---
 

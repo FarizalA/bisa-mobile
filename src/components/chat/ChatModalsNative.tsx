@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { X, FileText, DollarSign, Receipt, Clock, ShieldCheck, CheckCircle2, Star, Calendar, ExternalLink, ChevronRight, Package, Copy } from "lucide-react-native";
 import { formatRupiah, calculatePaymentBreakdown } from "../../lib/payment";
-import { formatNoInvoice, paymentLabel, statusColorNative, fmtDate } from "../../lib/invoice";
+import { formatNoInvoice, paymentLabel, statusColorNative, fmtDate, buildOrderTimeline } from "../../lib/invoice";
+import { OrderTimeline } from "../order/OrderTimeline";
 import * as Haptics from "expo-haptics";
 
 // 1. MODAL TAWAR HARGA
@@ -358,6 +359,15 @@ export function MobileOrderDetailModal({
                   <Text className="text-[10px] text-gray-400 mt-2 font-medium">Metode <Text className="text-gray-700 font-bold">COD</Text></Text>
                 )}
               </View>
+            </View>
+
+            {/* Timeline Histori Pesanan (Fase 5) */}
+            <View className="bg-white rounded-2xl border border-gray-200 p-4 mb-4">
+              <View className="flex-row items-center gap-1.5 mb-3">
+                <Clock size={11} color="#9CA3AF" />
+                <Text className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">RIWAYAT PESANAN</Text>
+              </View>
+              <OrderTimeline steps={buildOrderTimeline(order)} compact />
             </View>
           </ScrollView>
 

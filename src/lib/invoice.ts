@@ -53,6 +53,70 @@ export function breakdownFromPrice(price: number) {
   return calculatePaymentBreakdown(price);
 }
 
+export type TimelineStep = {
+  key: string;
+  label: string;
+  description?: string;
+  timestamp?: string | null;
+  state: "done" | "active" | "pending" | "cancelled";
+};
+
+// Timeline histori pesanan (Fase 5) — urutan: Dibuat -> Mitra Dipilih -> Terbayar Escrow -> Dikerjakan -> Terkirim -> Selesai
+export function buildOrderTimeline(order: {
+  status?: string | null;
+  job_status?: string | null;
+  payment_status?: string | null;
+  payment_method?: string | null;
+  mitra_id?: number | string | null;
+  created_at?: string | null;
+  paid_at?: string | null;
+  updated_at?: string | null;
+  mitra_earnings?: number | null;
+} | null | undefined): TimelineStep[] {
+  if (!order) return [];
+  const js = (order.job_status || order.status || "").toLowerCase();
+  const ps = (order.payment_status || "").toLowerCase();
+  const pm = (order.payment_method || "").toUpperCase();
+  const isCOD = pm === "COD" || ps === "cod_pending" || ps === "cod_completed";
+
+  const isCancelled = js === "dibatalkan" || js === "cancelled" || js === "ditolak" || js === "expired" || ps === "cancelled" || ps === "cod_cancelled" || ps === "refunded";
+  const isDone = js === "selesai" || ps === "selesai" || ps === "cod_completed" || ps === "released" || ps === "escrow_released";
+  const hasMitra = !!order.mitra_id;
+  const isPaid = isCOD
+    ? ps === "cod_completed"
+    : (ps === "escrow_held" || ps === "paid" || ps === "settlement" || ps === "lunas" || ps === "released" || ps === "escrow_released");
+  const isWorking = js === "sedang_dikerjakan" || js === "menunggu_konfirmasi_selesai" || js === "mitra_ditemukan" || isDone;
+  const isDelivered = js === "menunggu_konfirmasi_selesai" || isDone;
+
+  // Posisi langkah tertinggi yang sudah tercapai
+  type Raw = { key: string; label: string; description?: string; timestamp?: string | null; reached: boolean };
+  const steps: Raw[] = [
+    { key: "created", label: "Pesanan Dibuat", description: "Pesanan dipublikasikan ke mitra", timestamp: order.created_at, reached: true },
+    { key: "mitra", label: "Mitra Dipilih", description: hasMitra ? "Mitra telah menerima pekerjaan" : "Menunggu mitra menerima", timestamp: hasMitra ? order.updated_at : null, reached: hasMitra },
+    { key: "paid", label: isCOD ? "Konfirmasi COD" : "Terbayar (Escrow)", description: isCOD ? "Pembayaran tunai saat serah terima" : "Dana ditahan aman oleh BISA", timestamp: isCOD ? null : (order.paid_at || (isPaid ? order.updated_at : null)), reached: isPaid },
+    { key: "working", label: "Sedang Dikerjakan", description: "Mitra mengerjakan pesanan", timestamp: isWorking ? order.updated_at : null, reached: isWorking },
+    { key: "delivered", label: "Pekerjaan Terkirim", description: "Mitra mengirim hasil pekerjaan", timestamp: isDelivered ? order.updated_at : null, reached: isDelivered },
+    { key: "done", label: "Selesai", description: "Pesanan selesai dan dana diteruskan", timestamp: isDone ? order.updated_at : null, reached: isDone },
+  ];
+
+  if (isCancelled) {
+    const lastReached = steps.reduce((acc, s, i) => (s.reached ? i : acc), 0);
+    return steps.map((s, i) => {
+      if (i < lastReached) return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "done" as const };
+      if (i === lastReached) return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "cancelled" as const };
+      return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "pending" as const };
+    });
+  }
+
+  // Langkah pertama yang belum tercapai = active
+  const activeIdx = steps.findIndex((s) => !s.reached);
+  return steps.map((s, i) => {
+    if (s.reached && (activeIdx === -1 || i < activeIdx)) return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "done" as const };
+    if (i === activeIdx) return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "active" as const };
+    return { key: s.key, label: s.label, description: s.description, timestamp: s.timestamp, state: "pending" as const };
+  });
+}
+
 export function paymentLabel(method?: string | null, status?: string | null): string {
   const m = (method || "").toUpperCase();
   const s = (status || "").toLowerCase();

@@ -11,6 +11,7 @@ import {
 } from "lucide-react-native";
 import { useChatLogic } from "../../../src/hooks/useChatLogic";
 import { formatBudget, parseOrderContent } from "../../../src/lib/chatHelpers";
+import { formatRupiah, calculatePaymentBreakdown } from "../../../src/lib/payment";
 import {
   TextBubble, ImageBubble, LocationBubble, OfferBubble,
   OrderCardBubbleRN, DeliveryBubbleRN, RevisionCardBubbleRN,
@@ -235,6 +236,33 @@ export default function ClientDirectChatPage() {
             </View>
             <TouchableOpacity onPress={() => chat.setShowPaySheet(false)} className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center"><X size={16} color="#6B7280" /></TouchableOpacity>
           </View>
+
+          {/* Rincian Biaya (Fase 5) */}
+          {(() => {
+            const bd = calculatePaymentBreakdown(chat.payAgreedPrice || 0);
+            if (!chat.payAgreedPrice) return null;
+            return (
+              <View className="rounded-2xl border border-gray-100 overflow-hidden bg-white mb-4">
+                <View className="flex-row justify-between px-3.5 py-2.5">
+                  <Text className="text-xs text-gray-500">Harga Jasa</Text>
+                  <Text className="text-xs font-bold text-gray-900">{formatRupiah(bd.agreedPrice)}</Text>
+                </View>
+                <View className="flex-row justify-between px-3.5 py-2.5 bg-gray-50 border-t border-gray-100">
+                  <Text className="text-xs text-gray-500">Biaya Layanan</Text>
+                  <Text className="text-xs font-semibold text-gray-700">{formatRupiah(bd.appFee)}</Text>
+                </View>
+                <View className="flex-row justify-between px-3.5 py-2.5 border-t border-gray-100">
+                  <Text className="text-xs text-gray-500">Biaya Penanganan Gateway</Text>
+                  <Text className="text-xs font-semibold text-gray-700">{formatRupiah(bd.paymentGatewayFee)}</Text>
+                </View>
+                <View className="flex-row justify-between items-center px-3.5 py-3 bg-[#FFFBEB] border-t border-[#FEF3C7]">
+                  <Text className="text-xs font-extrabold text-gray-900">Total Tagihan</Text>
+                  <Text className="text-sm font-extrabold text-[#EA580C]">{formatRupiah(bd.totalBuyerPays)}</Text>
+                </View>
+              </View>
+            );
+          })()}
+
           <TouchableOpacity
             disabled={chat.payingCod || chat.payingOnline}
             onPress={() => chat.choosePayment("COD")}

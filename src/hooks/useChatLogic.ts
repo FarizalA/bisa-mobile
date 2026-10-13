@@ -77,6 +77,7 @@ export function useChatLogic(conversationId: string) {
   const [offerAmount, setOfferAmount] = useState("");
   const [payJobId, setPayJobId] = useState("");
   const [payBudget, setPayBudget] = useState("");
+  const [payAgreedPrice, setPayAgreedPrice] = useState(0);
   const [payingCod, setPayingCod] = useState(false);
   const [payingOnline, setPayingOnline] = useState(false);
   const [deliveryJobId, setDeliveryJobId] = useState("");
@@ -516,9 +517,10 @@ export function useChatLogic(conversationId: string) {
       setPayJobId(jobId);
       // 1:1 web: bawa budget asli (agreed_price / jobInfo / bubble) — bukan status
       let budgetStr = "";
+      let priceNum = 0;
       if (jobInfo && String(jobInfo.id) === String(jobId)) {
         const p = Number((jobInfo as any).agreed_price) || 0;
-        if (p > 0) budgetStr = `Rp ${p.toLocaleString("id-ID")}`;
+        if (p > 0) { priceNum = p; budgetStr = `Rp ${p.toLocaleString("id-ID")}`; }
         else if ((jobInfo as any).budget) budgetStr = String((jobInfo as any).budget);
       }
       if (!budgetStr) {
@@ -526,12 +528,13 @@ export function useChatLogic(conversationId: string) {
           const { data: _j } = await supabase.from("pekerjaan_bisa").select("agreed_price, budget").eq("id", Number(jobId)).maybeSingle();
           if (_j) {
             const p = Number((_j as any).agreed_price) || 0;
-            if (p > 0) budgetStr = `Rp ${p.toLocaleString("id-ID")}`;
+            if (p > 0) { priceNum = p; budgetStr = `Rp ${p.toLocaleString("id-ID")}`; }
             else if ((_j as any).budget) budgetStr = String((_j as any).budget);
           }
         } catch {}
       }
       setPayBudget(budgetStr);
+      setPayAgreedPrice(priceNum > 0 ? priceNum : Number((budgetStr || "").replace(/\D/g, "")) || 0);
       setShowPaySheet(true);
     } else if (action === "deliver") {
       setDeliveryJobId(jobId);
@@ -1146,7 +1149,7 @@ export function useChatLogic(conversationId: string) {
     showInvoiceModal, setShowInvoiceModal, sendingInvoice,
     showDeliveryModal, setShowDeliveryModal, deliveryJobId, setDeliveryJobId, deliveryLink, setDeliveryLink, deliveryNote, setDeliveryNote, deliveryFileUrl, setDeliveryFileUrl, deliveryPreviewUri, setDeliveryPreviewUri, sendingDelivery,
     showRevisionModal, setShowRevisionModal, revisionJobId, setRevisionJobId, revisionNote, setRevisionNote, sendingRevision,
-    showPaySheet, setShowPaySheet, payJobId, setPayJobId, payBudget, setPayBudget, payingCod, payingOnline,
+    showPaySheet, setShowPaySheet, payJobId, setPayJobId, payBudget, setPayBudget, payAgreedPrice, payingCod, payingOnline,
     showOrderDetailModal, setShowOrderDetailModal, selectedOrderDetail, setSelectedOrderDetail,
     jobStatusMap, jobPaymentMethodMap, jobInfo, showJobBanner, setShowJobBanner, deletingChat,
     clientQuickReplies, mitraQuickReplies, isChatLocked,
