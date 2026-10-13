@@ -187,7 +187,8 @@ export async function releaseEscrowPayout(
       body: JSON.stringify({ jobId: Number(jobId), action: "release" }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Gagal rilis escrow");
+    if (!res.ok) throw new Error(data.error || data.message || "Gagal rilis escrow");
+    if (data.success === false) throw new Error(data.error || data.message || "Gagal rilis escrow");
     return { success: true, isCOD: data.isCOD || false, earnings: data.earnings || 0, fee: data.fee || 0, message: data.message || "" };
   } catch (err: any) {
     console.error("[releaseEscrowPayout] Error:", err);

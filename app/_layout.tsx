@@ -4,7 +4,7 @@ import { SupabaseProvider } from "../src/contexts/SupabaseContext";
 import { PopupProvider } from "../src/components/PopupProvider.native";
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View, StatusBar } from "react-native";
+import { ActivityIndicator, View, StatusBar, Platform } from "react-native";
 import { usePushToken } from "../src/hooks/usePushToken";
 import "../global.css";
 
@@ -31,6 +31,8 @@ if (Notifications) {
 function useNotificationObserver() {
   useEffect(() => {
     if (!Notifications) return;
+    // Web tidak punya remote push — jangan sentuh API notifications di sini.
+    if (Platform.OS === "web") return;
     function redirect(notification: any) {
       const data: any = notification.request.content.data || {};
       const url: string | undefined = data.url;
@@ -39,9 +41,15 @@ function useNotificationObserver() {
       }
     }
 
-    const last = Notifications.getLastNotificationResponse?.();
+    let last: any;
+    try {
+      last = Notifications.getLastNotificationResponse?.();
+    } catch (e) {
+      console.warn("[Push] getLastNotificationResponse gagal:", e);
+    }
     if (last?.notification) redirect(last.notification);
 
+    if (typeof Notifications.addNotificationResponseReceivedListener !== "function") return;
     const sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
       redirect(response.notification);
     });

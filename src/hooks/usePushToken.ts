@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as Device from "expo-device";
-import { supabase } from "../lib/supabase";
+import { getBisaToken } from "../lib/bisa-token";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://bisa-admin.vercel.app";
 
@@ -32,6 +32,13 @@ export function usePushToken() {
     // Expo Go (SDK 53+) tidak mendukung remote push — abort di sini.
     if (!Notifications) {
       console.log("[Push] expo-notifications tidak termuat — skip registrasi");
+      setLoading(false);
+      return;
+    }
+
+    // Web tidak mendukung remote push tanpa VAPID key — skip total.
+    if (Platform.OS === "web") {
+      console.log("[Push] Skip — web tidak mendukung push tanpa VAPID key");
       setLoading(false);
       return;
     }
@@ -91,6 +98,7 @@ export function usePushToken() {
   // Listen token change (roll)
   useEffect(() => {
     if (!Notifications) return;
+    if (Platform.OS === "web") return;
     const sub = Notifications.addPushTokenListener(async (newToken: any) => {
       setToken(newToken.data);
       await sendToBackend(newToken.data);
@@ -103,8 +111,7 @@ export function usePushToken() {
 
 async function sendToBackend(token: string) {
   try {
-    const session = await supabase.auth.getSession();
-    const accessToken = session.data.session?.access_token;
+    const accessToken = await getBisaToken();
     if (!accessToken) {
       console.warn("[Push] Tidak ada access token — skip kirim ke backend");
       return;
@@ -130,8 +137,7 @@ async function sendToBackend(token: string) {
 
 export async function clearPushToken() {
   try {
-    const session = await supabase.auth.getSession();
-    const accessToken = session.data.session?.access_token;
+    const accessToken = await getBisaToken();
     if (!accessToken) return;
     await fetch(`${BACKEND_URL}/api/user/push-token`, {
       method: "DELETE",
