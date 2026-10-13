@@ -54,26 +54,28 @@ Dokumen ini adalah panduan strategis dan teknis menyeluruh hasil audit logika bi
 
 ---
 
-### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet - 🟡 KODE SELESAI (MENUNGGU DEPLOY VERCEL & UJI END-TO-END)
+### 🛡️ FASE 2: Proteksi Server-Side Escrow, Refund & Validasi Dompet - 🟡 MENUNGGU DEPLOY VERCEL (COMMIT 3922E87)
 **Target Utama:** Mencegah manipulasi saldo dari client-side dan memperkuat konsistensi buku besar keuangan.
 
-1. **Pindahkan Eksekusi Dana ke Server (`bisa-admin`)** - ✅ SELESAI KODE:
-   - Buat endpoint unified di Next.js App Router:
-     - `POST /api/order/action`: Menangani `release`, `refund`, `request_cancel`, dan `respond_cancel` dengan verifikasi JWT Supabase dan idempotency check. ✅
-     - `POST /api/order`: Fallback route untuk action handler. ✅
-     - Endpoint pendukung: verifikasi `getAuthUser` dan pencatatan otomatis ke tabel `transactions`. ✅
-   - *Status deploy*: Kode sudah di-commit & push ke GitHub (`main`), menunggu deployment Vercel selesai sinkronisasi route. ⏳
-2. **Mobile Client (`bisa-mobile`)** - ✅ SELESAI KODE:
-   - Buat `src/lib/auth.ts`: Helper `getSupabaseToken()` untuk autentikasi Bearer JWT. ✅
-   - Refactor `src/lib/payment.ts`: Fungsi `releaseEscrowPayout` dan `processOrderRefund` diganti menjadi wrapper-fetch ke `/api/order/action`. ✅
-   - Perbarui `src/hooks/useChatLogic.ts` & `app/c/aktivitas.tsx` untuk menggunakan API server-side baru. ✅
-   - Pembersihan build: 0 error lint (`npx expo lint`) & 0 type error (`npx tsc --noEmit`). ✅
-   - Commit semua perubahan ke git master. ✅
-3. **Audit Konsistensi Saldo Dompet & Uji End-to-End**:
-   - Sinkronisasi kolom `saldo` dan `balance` di tabel `users_bisa`. ✅
-   - [ ] Uji release escrow via mobile/curl (cek saldo Mitra bertambah).
-   - [ ] Uji refund order via mobile/curl (cek saldo Klien kembali).
-   - [ ] Uji idempotensi (jalankan 2x, saldo tidak bertambah ganda).
+**Status Timeline:**
+1. ✅ Backend endpoint `/api/order/action` diimplementasi lengkap (release, refund, request_cancel, respond_cancel).
+2. ✅ Mobile wrapper (`auth.ts`, `payment.ts`) sudah menggunakan fetch ke API Vercel.
+3. ✅ Lint & TypeScript bersih (0 error).
+4. ✅ Commit & push ke GitHub.
+5. 🟡 Build error #1: fallback route `/api/order/route.ts` meng-import `/action/route` → tidak valid di Next.js App Router → **FIXED** (hapus file).
+6. 🟡 Build error #2: `app/api/order/action/route.ts` **belum pernah di-commit** (untracked) → **FIXED** (`git add + commit 3922e87`).
+7. ⏳ **WAITING**: Vercel membangun ulang commit `3922e87`.
+
+**Yang diharapkan setelah Vercel selesai:**
+- ✅ Endpoint `/api/order/action` → HTTP 401 JSON (bukan 404 HTML).
+- ✅ Uji end-to-end: release escrow, refund, cancel via curl + token JWT.
+- ✅ Verifikasi saldo Supabase bertambah/berkurang sesuai aksi.
+
+**Artifact:**
+- File kode: `bisa-admin/app/api/order/action/route.ts` (177 baris, lengkap).
+- Dokumentasi test: `bisa-admin/TEST_ENDPOINT.md` (contoh curl + workflow).
+- Commit terakhir: `3922e87` (feat: add /api/order/action endpoint).
+
 
 ---
 
