@@ -180,13 +180,13 @@ export default function MitraPublicProfilePage() {
 
         <View className="px-3 -mt-8 z-10 w-full">
           <View
-            className="bg-white rounded-[24px] p-5 border border-gray-100/80"
+            className="bg-white rounded-[24px] p-5"
             style={{
-              elevation: 2,
+              elevation: 1,
               shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.04,
-              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.03,
+              shadowRadius: 8,
             }}
           >
             <View className="flex-row items-start gap-4">
@@ -270,9 +270,9 @@ export default function MitraPublicProfilePage() {
         </View>
 
         <View className="px-4 mt-3 flex-row gap-2">
-          <View className="flex-1 bg-white rounded-2xl p-3 items-center border border-gray-100"><Clock size={18} color="#FF6B00" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{onTimeVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Tepat Waktu</Text></View>
-          <View className="flex-1 bg-white rounded-2xl p-3 items-center border border-gray-100"><Zap size={18} color="#10B981" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{responseVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Respon Cepat</Text></View>
-          <View className="flex-1 bg-white rounded-2xl p-3 items-center border border-gray-100"><ShieldCheck size={18} color="#B45309" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{warrantyVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Garansi Aman</Text></View>
+          <View className="flex-1 bg-white rounded-2xl p-3 items-center" style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4 }}><Clock size={18} color="#FF6B00" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{onTimeVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Tepat Waktu</Text></View>
+          <View className="flex-1 bg-white rounded-2xl p-3 items-center" style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4 }}><Zap size={18} color="#10B981" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{responseVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Respon Cepat</Text></View>
+          <View className="flex-1 bg-white rounded-2xl p-3 items-center" style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4 }}><ShieldCheck size={18} color="#B45309" /><Text className="text-sm font-extrabold text-[#131B2E] mt-1">{warrantyVal}</Text><Text className="text-[10px] text-gray-400 font-medium">Garansi Aman</Text></View>
         </View>
 
         {services.length > 0 && (
@@ -413,7 +413,7 @@ export default function MitraPublicProfilePage() {
               </View>
 
               {reviews.slice(0, 1).map((rev, idx) => (
-                <View key={idx} className="bg-white rounded-[24px] p-5 border border-gray-50 shadow-sm">
+                <View key={idx} className="bg-white rounded-[24px] p-5" style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 6 }}>
                   <View className="flex-row justify-between items-start mb-4">
                     <View className="flex-row items-center gap-3">
                       <View className="w-10 h-10 rounded-full bg-orange-100 border border-orange-200 overflow-hidden items-center justify-center shrink-0">
@@ -439,7 +439,7 @@ export default function MitraPublicProfilePage() {
               ))}
             </>
           ) : (
-            <View className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm items-center">
+            <View className="bg-white rounded-[24px] p-5 items-center" style={{ elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 6 }}>
               <MessageSquare size={28} color="#D1D5DB" />
               <Text className="text-xs font-bold text-gray-800 mt-2">Belum Ada Ulasan</Text>
             </View>
@@ -448,7 +448,7 @@ export default function MitraPublicProfilePage() {
       </ScrollView>
 
       <View
-        className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-100 px-4 pt-3 shadow-lg z-40"
+        className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-100 px-4 pt-3 z-40"
         style={{ paddingBottom: Math.max(insets.bottom, 12) }}
       >
         <View className="flex-row items-center justify-between gap-3">
