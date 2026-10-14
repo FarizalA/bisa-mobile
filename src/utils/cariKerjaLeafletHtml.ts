@@ -23,8 +23,23 @@ jobs.forEach(j=>{
   if(!j.latitude||!j.longitude) return;
   const m=L.marker([Number(j.latitude),Number(j.longitude)],{icon:jobIcon}).addTo(map);
   const title = String(j.judul).replace(/</g, "&lt;");
-  const popup='<div class="popup-card"><div style="font-weight:800;font-size:13px;color:#111">'+title+'</div><div style="font-size:11px;color:#6b7280">'+j.kategori+'</div><div style="font-size:12px;font-weight:800;color:#059669;margin-top:4px">'+j.budget+'</div><button onclick="window.ReactNativeWebView ? window.ReactNativeWebView.postMessage(JSON.stringify({type:\\'SELECT_JOB\\',id:\\''+j.id+'\\'})) : window.parent.postMessage({type:\\'SELECT_JOB\\',id:\\''+j.id+'\\'},\\'*\\')" style="margin-top:8px;width:100%;padding:7px;background:#10b981;color:white;border:none;border-radius:8px;font-weight:800;font-size:11px;cursor:pointer">Lihat Detail</button></div>';
+  const popup='<div class="popup-card"><div style="font-weight:800;font-size:13px;color:#111">'+title+'</div><div style="font-size:11px;color:#6b7280">'+j.kategori+'</div><div style="font-size:12px;font-weight:800;color:#059669;margin-top:4px">'+j.budget+'</div><button type="button" data-job-id="'+String(j.id)+'" class="popup-detail-btn" style="margin-top:8px;width:100%;padding:7px;background:#10b981;color:white;border:none;border-radius:8px;font-weight:800;font-size:11px;cursor:pointer">Lihat Detail</button></div>';
   m.bindPopup(popup, {className:'custom-popup'});
+  m.on('popupopen', function(){
+    setTimeout(function(){
+      var btn = document.querySelector('.leaflet-popup .popup-detail-btn[data-job-id="'+String(j.id)+'"]');
+      if(!btn) return;
+      btn.onclick = function(ev){
+        if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+        var payload = JSON.stringify({type:'SELECT_JOB', id:String(j.id)});
+        if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){
+          window.ReactNativeWebView.postMessage(payload);
+        } else {
+          try { window.parent.postMessage(payload,'*'); } catch(e){}
+        }
+      };
+    }, 80);
+  });
 });
 
 window.addEventListener('message',e=>{if(e.data&&e.data.type==='RECENTER') map.flyTo([userLat,userLng],15,{animate:true,duration:1.2});});
