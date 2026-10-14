@@ -68,8 +68,24 @@ export async function processOrderRefund(
       throw new Error(jobErr?.message || "Pesanan tidak ditemukan");
     }
 
-    if (job.status === "dibatalkan" && job.payment_status === "refunded") {
-      return { success: true, refunded: true, amount: 0, message: "Pesanan ini sudah dibatalkan dan direfund sebelumnya." };
+    // Idempotency: kalau dana sudah pernah dikembalikan (refunded/released/cancelled)
+    // ATAU pesanan sudah selesai, JANGAN refund lagi.
+    // Guard hanya andalkan payment_status (bukan status) karena status bisa ditimpa
+    // oleh aksi lain (mis. handleAcceptOrder) sehingga check status saja tidak cukup.
+    const alreadyFinal =
+      job.payment_status === "refunded" ||
+      job.payment_status === "released" ||
+      job.payment_status === "cod_completed" ||
+      job.payment_status === "cod_cancelled" ||
+      job.payment_status === "cancelled" ||
+      job.status === "selesai";
+    if (alreadyFinal) {
+      return {
+        success: true,
+        refunded: job.payment_status === "refunded",
+        amount: 0,
+        message: "Pesanan ini sudah pernah diproses (dana sudah dikembalikan / escrow sudah dicairkan).",
+      };
     }
 
     const isCOD = job.payment_method === "COD" || job.payment_status === "cod_pending" || job.payment_status === "cod_completed";
@@ -84,10 +100,11 @@ export async function processOrderRefund(
 
     // 1. Jika COD: tidak ada escrow yang ditahan, batalkan tanpa kredit saldo
     if (isCOD) {
-      await supabase
+      const { error: codErr } = await supabase
         .from("pekerjaan_bisa")
         .update({ status: "dibatalkan", payment_status: "cod_cancelled" })
         .eq("id", numJobId);
+      if (codErr) throw new Error(`Gagal batalkan pesanan COD: ${codErr.message}`);
 
       return {
         success: true,
@@ -103,20 +120,22 @@ export async function processOrderRefund(
 
       if (refundAmount > 0 && job.pelanggan_id) {
         // Ambil data saldo pelanggan saat ini
-        const { data: clientUser } = await supabase
+        const { data: clientUser, error: cuErr } = await supabase
           .from("users_bisa")
           .select("id, saldo, balance")
           .eq("id", job.pelanggan_id)
           .maybeSingle();
+        if (cuErr) throw new Error(`Gagal baca saldo Klien: ${cuErr.message}`);
 
         if (clientUser) {
           const curSaldo = Number(clientUser.saldo ?? clientUser.balance ?? 0);
           const newSaldo = curSaldo + refundAmount;
 
-          await supabase
+          const { error: saldoErr } = await supabase
             .from("users_bisa")
             .update({ saldo: newSaldo, balance: newSaldo })
             .eq("id", job.pelanggan_id);
+          if (saldoErr) throw new Error(`Gagal kembalikan saldo Klien: ${saldoErr.message}`);
 
           // Catat ke ledger transactions (kategori: refund)
           try {
@@ -137,10 +156,11 @@ export async function processOrderRefund(
         }
       }
 
-      await supabase
+      const { error: stErr } = await supabase
         .from("pekerjaan_bisa")
         .update({ status: "dibatalkan", payment_status: "refunded" })
         .eq("id", numJobId);
+      if (stErr) throw new Error(`Gagal update status pekerjaan: ${stErr.message}`);
 
       return {
         success: true,
@@ -151,10 +171,11 @@ export async function processOrderRefund(
     }
 
     // 3. Jika belum bayar (belum ada dana yang masuk)
-    await supabase
+    const { error: unpaidErr } = await supabase
       .from("pekerjaan_bisa")
       .update({ status: "dibatalkan", payment_status: "cancelled" })
       .eq("id", numJobId);
+    if (unpaidErr) throw new Error(`Gagal batalkan pesanan: ${unpaidErr.message}`);
 
     return {
       success: true,
@@ -317,13 +338,14 @@ export async function respondOrderCancellation(
     } else {
       // Mitra menolak pembatalan (misal pekerjaan sudah > 80% atau ada perselisihan)
       const cleanRejectReason = rejectReason?.trim() || "Pekerjaan sedang berlangsung / progres > 80%";
-      await supabase
+      const { error: rejErr } = await supabase
         .from("pekerjaan_bisa")
         .update({
           status: "sedang_dikerjakan",
           alasan_penolakan: `Pembatalan ditolak: ${cleanRejectReason}`,
         })
         .eq("id", numJobId);
+      if (rejErr) throw new Error(`Gagal menolak pembatalan: ${rejErr.message}`);
 
       try {
         const { ensureConversationAndNavigate } = await import("./chatInbox");

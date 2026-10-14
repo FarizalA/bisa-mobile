@@ -367,12 +367,30 @@ export function useMitraOrderDetail(jobId: string) {
 
   const handleAcceptOrder = useCallback(async () => {
     if (!job) return;
+    // Guard: hanya bisa menerima pesanan yang memang menunggu persetujuan mitra.
+    // Tanpa guard ini, update `.eq("id")` buta bisa menimpa status `menunggu_persetujuan_batal`
+    // (atau status final lain) sehingga pengajuan batal hilang tanpa pernah diproses.
+    const ACCEPTABLE = ["menunggu_konfirmasi_mitra", "menunggu_pembayaran"];
+    if (!ACCEPTABLE.includes(job.status)) {
+      showNiceAlert(
+        "Tidak Bisa Diterima",
+        `Pesanan ini sudah berstatus "${job.status}". Muat ulang halaman.`,
+        "error"
+      );
+      await fetchJobDetail();
+      return;
+    }
     setActing(true);
     try {
       const storedUser: any = await getStoredUser();
       const effectiveMitraId = Number(job.mitra_id || storedUser?.id);
       const nextStatus = job.payment_status === "belum_bayar" ? "menunggu_pembayaran" : "sedang_dikerjakan";
-      const { error: updErr } = await supabase.from("pekerjaan_bisa").update({ status: nextStatus }).eq("id", job.id);
+      // Bersihkan sisa pengajuan pembatalan supaya tidakyx바이gba
+      const { error: updErr } = await supabase
+        .from("pekerjaan_bisa")
+        .update({ status: nextStatus, cancel_requested_at: null, cancel_reason: null })
+        .eq("id", job.id)
+        .eq("status", job.status); // optimistic lock: hanya update bila status tak berubah
       if (updErr) throw updErr;
       try {
         const { ensureConversationAndNavigate } = await import("../lib/chatInbox");
