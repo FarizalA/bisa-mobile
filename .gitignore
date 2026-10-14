@@ -47,3 +47,5 @@ yarn-error.*
 apk-build/
 *.apk
 *.aab
+
+build_final.log
