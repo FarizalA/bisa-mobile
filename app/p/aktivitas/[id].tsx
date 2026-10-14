@@ -1023,33 +1023,42 @@ export default function MitraOrderDetailPage() {
           )}
 
           {isWorking && (
-            <>
-              <TouchableOpacity
-                onPress={() => setShowMutualModal(true)}
-                className="px-3.5 py-3 rounded-full border border-red-200 bg-red-50 items-center justify-center flex-row gap-1"
-              >
-                <Handshake size={14} color="#b91c1c" />
-                <Text className="text-xs font-bold text-red-700">Batal Sepakat</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowDisputeModal(true)}
-                className="px-3.5 py-3 rounded-full border border-amber-200 bg-amber-50 items-center justify-center flex-row gap-1"
-              >
-                <FileText size={14} color="#b45309" />
-                <Text className="text-xs font-bold text-amber-800">Sengketa</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleOpenDirectChat} className="px-3.5 py-3 rounded-full border border-gray-200 bg-white items-center justify-center flex-row gap-1">
-                <MessageSquare size={14} color="#374151" />
-                <Text className="text-xs font-bold text-gray-700">Chat</Text>
-              </TouchableOpacity>
+            <View className="w-full flex-col gap-2.5">
+              {/* CTA utama — hijau, full-width */}
               <TouchableOpacity
                 onPress={() => setShowDeliveryModal(true)}
-                className="flex-1 py-3 rounded-full bg-emerald-600 items-center justify-center shadow-md flex-row gap-1.5"
+                className="w-full py-3.5 rounded-2xl bg-emerald-600 items-center justify-center shadow-md flex-row gap-2"
+                style={{ shadowColor: "#059669", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }}
               >
                 <FileText size={15} color="#ffffff" />
-                <Text className="text-xs font-black text-white">Kirim Hasil Kerja</Text>
+                <Text className="text-[11px] font-black text-white tracking-widest uppercase">Kirim Hasil Kerja</Text>
               </TouchableOpacity>
-            </>
+
+              {/* Aksi sekunder — pill ghost sejajar */}
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  onPress={handleOpenDirectChat}
+                  className="flex-1 py-2 rounded-full border border-gray-200 bg-gray-50 items-center justify-center flex-row gap-1"
+                >
+                  <MessageSquare size={13} color="#6b7280" />
+                  <Text className="text-[10px] font-bold text-gray-500">Chat Klien</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowMutualModal(true)}
+                  className="flex-1 py-2 rounded-full border border-gray-200 bg-gray-50 items-center justify-center flex-row gap-1"
+                >
+                  <Handshake size={13} color="#6b7280" />
+                  <Text className="text-[10px] font-bold text-gray-500">Batal Sepakat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowDisputeModal(true)}
+                  className="flex-1 py-2 rounded-full border border-amber-200 bg-amber-50/60 items-center justify-center flex-row gap-1"
+                >
+                  <FileText size={13} color="#d97706" />
+                  <Text className="text-[10px] font-bold text-amber-700">Sengketa</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
 
           {isPendingCancel && (
