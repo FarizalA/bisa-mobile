@@ -84,11 +84,18 @@ function CariKerjaMapWeb({ logic }: { logic: CariKerjaLogic }) {
           const m = L.marker([Number(j.latitude), Number(j.longitude)], { icon: jobIcon }).addTo(map);
           const popup = `<div style="font-family:sans-serif;min-width:170px"><div style="font-weight:800;font-size:13px;color:#111">${String(j.judul).replace(/</g, "&lt;")}</div><div style="font-size:11px;color:#6b7280">${j.kategori}</div><div style="font-size:12px;font-weight:800;color:#059669;margin-top:4px">${j.budget}</div><button id="btn-${j.id}" style="margin-top:8px;width:100%;padding:7px;background:#10b981;color:white;border:none;border-radius:8px;font-weight:800;font-size:11px;cursor:pointer">Lihat Detail</button></div>`;
           m.bindPopup(popup);
+          // Tunggu DOM popup selesai dirender, lalu tempel listener ke tombol.
+          // Pakai addEventListener (bukan onclick langsung) supaya event klik marker
+          // yang memicu popup TIDAK ikut menembus ke tombol.
           m.on("popupopen", () => {
             setTimeout(() => {
               const btn = document.getElementById(`btn-${j.id}`);
-              if (btn) btn.onclick = () => setSelectedJob(j);
-            }, 0);
+              if (!btn) return;
+              btn.addEventListener("click", (ev: any) => {
+                try { ev.stopPropagation(); } catch {}
+                setSelectedJob(j);
+              });
+            }, 60);
           });
           // Sengaja TANPA handler click langsung: klik marker hanya buka popup ringkas,
           // modal detail baru muncul setelah user menekan tombol "Lihat Detail" (1:1 native).
@@ -178,8 +185,9 @@ export default function CariKerjaMap({ logic }: { logic: CariKerjaLogic }) {
         onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
-            if (data.type === "SELECT_JOB" && data.id) {
-              const job = jobs.find((j: any) => j.id === data.id);
+            if (data.type === "SELECT_JOB" && data.id != null) {
+              // id dari postMessage selalu string, id job bisa number → samakan tipe.
+              const job = jobs.find((j: any) => String(j.id) === String(data.id));
               if (job) setSelectedJob(job);
             }
           } catch (e) {}
