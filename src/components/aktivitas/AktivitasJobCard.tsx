@@ -305,38 +305,48 @@ export default function AktivitasJobCard({
         const st = String(job.status);
         const stOk = st === "sedang_dikerjakan" || st === "menunggu_konfirmasi_selesai";
         if (!stOk || (!isPaidEscrow && job.payment_method !== "COD")) return null;
+        const isConfirmStage = st === "menunggu_konfirmasi_selesai";
         return (
-        <View className="flex-col gap-2">
-          <TouchableOpacity
-            onPress={() => (isWorkingOver24h ? onCancelJob(job.id) : onMutualCancel(job))}
-            activeOpacity={0.88}
-            className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 items-center justify-center flex-row gap-1.5"
-          >
-            {isWorkingOver24h ? <XCircle size={15} color="#b91c1c" /> : <Handshake size={15} color="#b91c1c" />}
-            <Text className="text-xs font-black text-red-700">{isWorkingOver24h ? "Batalkan & Refund" : "Batal Sepakat"}</Text>
-          </TouchableOpacity>
-          {st === "menunggu_konfirmasi_selesai" && onDispute ? (
-            <TouchableOpacity
-              onPress={() => onDispute(job)}
-              activeOpacity={0.88}
-              className="w-full py-2.5 rounded-xl bg-amber-50 border border-amber-200 items-center justify-center flex-row gap-1.5"
-            >
-              <Scale size={15} color="#b45309" />
-              <Text className="text-xs font-black text-amber-800">Hasil Tidak Sesuai? Ajukan Sengketa</Text>
-            </TouchableOpacity>
-          ) : null}
+        <View className="flex-col gap-2.5">
+          {/* CTA utama — satu-satunya tombol full-width, hijau. */}
           <TouchableOpacity
             onPress={() => onReleaseFunds(job)}
             disabled={releasingJobId === job.id}
             activeOpacity={0.88}
             className="w-full py-3.5 rounded-2xl bg-emerald-600 items-center justify-center flex-row gap-2"
-            style={{ shadowColor: "#059669", shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 }}
+            style={{ shadowColor: "#059669", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }}
           >
             <CheckCircle2 size={16} color="#fff" />
-            <Text className="text-xs font-black text-white text-center" numberOfLines={2} style={{ lineHeight: 16 }}>
-              {releasingJobId === job.id ? "Memproses..." : isPaidEscrow ? `Konfirmasi Selesai & Rilis Dana (${formatRupiah(agreedPrice)})` : "Tandai Pekerjaan Selesai"}
+            <Text className="text-[11px] font-black text-white tracking-widest uppercase" numberOfLines={1}>
+              {releasingJobId === job.id ? "Memproses…" : isPaidEscrow ? `Selesai — Rilis ${formatRupiah(agreedPrice)}` : "Tandai Selesai"}
             </Text>
           </TouchableOpacity>
+
+          {/* Aksi sekunder — baris kecil, ghost style, sejajar. */}
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              onPress={() => (isWorkingOver24h ? onCancelJob(job.id) : onMutualCancel(job))}
+              activeOpacity={0.82}
+              className="flex-1 py-2 rounded-full flex-row items-center justify-center gap-1"
+              style={{ borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" }}
+            >
+              {isWorkingOver24h ? <XCircle size={13} color="#9CA3AF" /> : <Handshake size={13} color="#9CA3AF" />}
+              <Text className="text-[10px] font-bold text-gray-500">{isWorkingOver24h ? "Refund" : "Batal Sepakat"}</Text>
+            </TouchableOpacity>
+            {isConfirmStage && onDispute ? (
+              <TouchableOpacity
+                onPress={() => onDispute(job)}
+                activeOpacity={0.82}
+                className="flex-1 py-2 rounded-full flex-row items-center justify-center gap-1"
+                style={{ borderWidth: 1, borderColor: "#FDE68A", backgroundColor: "#FFFBEB" }}
+              >
+                <Scale size={13} color="#D97706" />
+                <Text className="text-[10px] font-bold text-amber-700">Sengketa</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <Text className="text-[10px] text-gray-400 text-center tracking-wide">Tap untuk kirim keputusan. Semua transaksi ditahan sampai — selesai.</Text>
         </View>
         );
       })()}
