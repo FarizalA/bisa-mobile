@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, ActivityIndicator, Alert } from "react-native";
-import { MessageSquare, Clock, Archive, ArchiveRestore } from "lucide-react-native";
+import { View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, ActivityIndicator, Modal } from "react-native";
+import { MessageSquare, Clock, Archive, ArchiveRestore, X } from "lucide-react-native";
 import { useRouter } from "expo-router";
 
 function formatTime(iso: string): string {
@@ -41,6 +41,7 @@ interface InboxListViewProps {
 export default function InboxListView({ role, chats, loading, refreshing, onRefresh, activeTab, onArchiveToggle, archivingId }: InboxListViewProps) {
   const router = useRouter();
   const isMitra = role === "mitra";
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -90,17 +91,7 @@ export default function InboxListView({ role, chats, loading, refreshing, onRefr
             }}
             onLongPress={() => {
               if (!onArchiveToggle || !chat.conversation_id) return;
-              const label = activeTab === "archive" ? "Keluarkan dari arsip?" : "Arsipkan chat ini?";
-              Alert.alert(
-                activeTab === "archive" ? "Keluarkan dari Arsip" : "Arsipkan Chat",
-                activeTab === "archive"
-                  ? "Chat akan kembali ke daftar Semua."
-                  : "Chat akan dipindahkan ke Arsip. Histori tetap tersimpan sebagai bukti.",
-                [
-                  { text: "Batal", style: "cancel" },
-                  { text: activeTab === "archive" ? "Keluarkan" : "Arsipkan", onPress: () => onArchiveToggle(chat.conversation_id!) },
-                ]
-              );
+              setConfirmId(chat.conversation_id!);
             }}
             activeOpacity={0.85}
             className="bg-white p-4 rounded-2xl border border-gray-100 flex-row gap-3 shadow-sm"
@@ -145,6 +136,39 @@ export default function InboxListView({ role, chats, loading, refreshing, onRefr
         ))}
       </View>
       <Text className="text-[10px] text-gray-400 text-center mt-4">Tekan lama pada chat untuk arsipkan / keluarkan dari arsip.</Text>
+
+      <Modal visible={!!confirmId} transparent animationType="fade" onRequestClose={() => setConfirmId(null)}>
+        <View className="flex-1 bg-black/50 items-center justify-center px-4">
+          <View className="bg-white rounded-[24px] w-full max-w-sm p-5 gap-3.5">
+            <View className="flex-row items-center gap-2">
+              <View className={`w-9 h-9 rounded-full items-center justify-center ${activeTab === "archive" ? "bg-emerald-100" : "bg-orange-100"}`}>
+                {activeTab === "archive" ? <ArchiveRestore size={18} color="#059669" /> : <Archive size={18} color="#EA580C" />}
+              </View>
+              <Text className="font-black text-gray-900 text-sm flex-1">{activeTab === "archive" ? "Keluarkan dari Arsip" : "Arsipkan Chat"}</Text>
+              <TouchableOpacity onPress={() => setConfirmId(null)} className="w-7 h-7 rounded-full bg-gray-100 items-center justify-center">
+                <X size={14} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-xs text-gray-600 leading-relaxed">
+              {activeTab === "archive" ? "Chat akan kembali ke daftar Semua." : "Chat akan dipindahkan ke Arsip. Histori tetap tersimpan sebagai bukti."}
+            </Text>
+            <View className="flex-row gap-2 mt-1">
+              <TouchableOpacity onPress={() => setConfirmId(null)} className="flex-1 py-3 rounded-full border border-gray-200 items-center justify-center">
+                <Text className="text-xs font-bold text-gray-700">Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (onArchiveToggle && confirmId) onArchiveToggle(confirmId);
+                  setConfirmId(null);
+                }}
+                className="flex-1 py-3 rounded-full bg-gray-900 items-center justify-center"
+              >
+                <Text className="text-xs font-black text-white">{activeTab === "archive" ? "Keluarkan" : "Arsipkan"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
