@@ -122,7 +122,6 @@ function SaldoCard({ logic }: { logic: ReturnType<typeof useDompetUnifiedLogic> 
           onPress={handleTarik}
           activeOpacity={0.85}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          style={{ zIndex: 20, elevation: 3 }}
           className="flex-1 bg-white py-3.5 rounded-2xl flex-row items-center justify-center gap-2"
         >
           <Banknote size={18} color="#FF6B00" />
@@ -135,8 +134,8 @@ function SaldoCard({ logic }: { logic: ReturnType<typeof useDompetUnifiedLogic> 
           }}
           activeOpacity={0.85}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          className="flex-1 py-3.5 rounded-2xl border flex-row items-center justify-center gap-2"
-          style={{ backgroundColor: "rgba(0,0,0,0.16)", borderColor: "rgba(255,255,255,0.45)", zIndex: 20, elevation: 3 }}
+          className="flex-1 py-3.5 rounded-2xl flex-row items-center justify-center gap-2"
+          style={{ backgroundColor: "rgba(255,255,255,0.22)", borderWidth: 1, borderColor: "rgba(255,255,255,0.55)" }}
         >
           <Landmark size={18} color="#fff" />
           <Text className="font-extrabold text-white text-sm">Rekening</Text>
