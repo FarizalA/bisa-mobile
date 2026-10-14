@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -92,6 +92,8 @@ export default function RadarPage() {
     }, [])
   );
 
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterKategori, setFilterKategori] = useState("Semua Jasa");
@@ -102,6 +104,14 @@ export default function RadarPage() {
   const [filterRating, setFilterRating] = useState<number>(0);
   const [onlyTrusted, setOnlyTrusted] = useState<boolean>(false);
   const [activeDropdown, setActiveDropdown] = useState<"kategori" | "radius" | "harga" | "rating" | null>(null);
+
+  // Reset ready flag tiap kali peta di-mount ulang (tab fokus kembali).
+  useEffect(() => {
+    if (!isRadarFocused) {
+      mapReadyRef.current = false;
+      RADAR_PENDING_QUEUE.current.length = 0;
+    }
+  }, [isRadarFocused]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 400);
@@ -246,14 +256,134 @@ export default function RadarPage() {
     onlyTrusted ||
     searchQuery;
 
+  // ==== PERFORMA HP (RAM 4GB): render HTML sekali, update via injectJavaScript ====
+  //_radanya: source={{html}} reload WebView penuh tiap radius/data berubah -> 100s marker
+  // dibangun ulang -> puncak RAM 2x -> lag/crash. Sekarang: peta hidup, cuma update isinya.
+  const initialLocRef = useRef<{ lat: number; lng: number } | null>(null);
+  const mapReadyRef = useRef(false);
+  const lastRadiusRef = useRef<number>(radius);
+  const lastProvidersRef = useRef<any[] | null>(null);
+
   const leafletHTML = useMemo(() => {
-    return generateRadarLeafletHtml(
-      location?.lat || -6.2088,
-      location?.lng || 106.8456,
-      radius,
-      providers
-    );
-  }, [location, radius, providers]);
+    // Sengaja HANYA bergantung pada lokasi awal: string HTML tak boleh berubah
+    // sau provider/radius berubah (itu yang memicu reload).
+    const lat = location?.lat ?? initialLocRef.current?.lat ?? -6.2088;
+    const lng = location?.lng ?? initialLocRef.current?.lng ?? 106.8456;
+    return generateRadarLeafletHtml(lat, lng, radius, providers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location?.lat, location?.lng]);
+
+  // Kirim update ke peta yang sudah hidup (tanpa reload).
+  const pushToMap = useCallback((payload: string) => {
+    const wv: any = webviewRef.current;
+    if (!wv || !mapReadyRef.current) return;
+    try {
+      wv.injectJavaScript(`try{${payload}}catch(e){};true;`);
+    } catch {}
+  }, []);
+
+  const syncRadius = useCallback(
+    (km: number) => {
+      const code = `if(window.updateRadius){window.updateRadius(${Number(km) || 0});}`;
+      if (mapReadyRef.current) pushToMap(code);
+      else RADAR_PENDING_QUEUE.current.push(code);
+      lastRadiusRef.current = km;
+    },
+    [pushToMap]
+  );
+
+  const syncProviders = useCallback(
+    (list: any[]) => {
+      const code = `if(window.updateProviders){window.updateProviders(${JSON.stringify(list)});}`;
+      if (mapReadyRef.current) pushToMap(code);
+      else RADAR_PENDING_QUEUE.current.push(code);
+      lastProvidersRef.current = list;
+    },
+    [pushToMap]
+  );
+
+  const syncUserLoc = useCallback(
+    (lat: number, lng: number) => {
+      const code = `if(window.updateUserLoc){window.updateUserLoc(${Number(lat)},${Number(lng)});}`;
+      if (mapReadyRef.current) pushToMap(code);
+      else RADAR_PENDING_QUEUE.current.push(code);
+      // Simpan supaya inisial string HTML tak render ulang (memo dependent hanya lat/lng).
+      initialLocRef.current = { lat, lng };
+    },
+    [pushToMap]
+  );
+
+  // Kirim tiap radius / daftar mitra berubah ke peta hidup (tanpa reload).
+  // Native: injectJavaScript. Web: postMessage ke iframe (HTML mendengar message events).
+  // ProviderList dikirim sebagai JSON string; radius sebagai number.
+  useEffect(() => { syncRadius(radius); }, [radius, syncRadius]);
+  useEffect(() => { syncProviders(providers); }, [providers, syncProviders]);
+  useEffect(() => { if (location) syncUserLoc(location.lat, location.lng); }, [location?.lat, location?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (Platform.OS === "web" && isRadarFocused) {
+      const el: any = (globalThis as any).document?.getElementById("radar-iframe") as any;
+      try {
+        el?.contentWindow?.postMessage(
+          { type: "RADAR_UPDATE", radius, providers },
+          "*"
+        );
+      } catch {}
+    }
+  }, [radius, providers, isRadarFocused]);
+
+  // MAP_READY dari HTML: peta sudah siap menerima updateRadius/updateProviders.
+  // Antrikan flush supaya payload tak hilang akibat race (radius duluan, ready belakangan).
+  const RADAR_PENDING_QUEUE: React.MutableRefObject<string[]> = useRef<string[]>([]);
+  const flushQueues = useCallback(() => {
+    const wv: any = webviewRef.current;
+    if (!wv || RADAR_PENDING_QUEUE.current.length === 0) return;
+    try {
+      RADAR_PENDING_QUEUE.current.forEach((code) => {
+        wv.injectJavaScript(`try{${code}}catch(e){};true;`);
+      });
+    } finally {
+      RADAR_PENDING_QUEUE.current.length = 0;
+    }
+  }, []);
+
+  const onWebViewMessage = useCallback(
+    (event: any) => {
+      try {
+        const data = JSON.parse(event.nativeEvent.data);
+        if (data.type === "MAP_READY") {
+          mapReadyRef.current = true;
+          // Flush sementara kosong; sync dari effects akan inject langsung karena ready sudah true.
+          flushQueues();
+          // Segera sync state terkini supaya peta tak delay satu frame.
+          if (location) {
+            pushToMap(`if(window.updateUserLoc){window.updateUserLoc(${Number(location.lat)},${Number(location.lng)});}`);
+          }
+          pushToMap(`if(window.updateRadius){window.updateRadius(${Number(radius)});}`);
+          if (providers.length) {
+            pushToMap(`if(window.updateProviders){window.updateProviders(${JSON.stringify(providers)});}`);
+          }
+          lastRadiusRef.current = radius;
+          lastProvidersRef.current = providers;
+          return;
+        }
+        if (data.type === "OPEN_PROFILE" && data.id) {
+          router.push(`/profil/${data.id}` as any);
+        }
+      } catch {}
+    },
+    [router, flushQueues, pushToMap, location, radius, providers]
+  );
+
+  const enqueuePushedCode = useCallback(
+    (code: string) => {
+      if (mapReadyRef.current) {
+        pushToMap(code);
+      } else {
+        RADAR_PENDING_QUEUE.current.push(code);
+      }
+    },
+    [pushToMap]
+  );
 
   const fallbackWebView = (
     <WebView
@@ -263,14 +393,7 @@ export default function RadarPage() {
       style={{ width: "100%", height: "100%" }}
       javaScriptEnabled
       domStorageEnabled
-      onMessage={(event) => {
-        try {
-          const data = JSON.parse(event.nativeEvent.data);
-          if (data.type === "OPEN_PROFILE" && data.id) {
-            router.push(`/profil/${data.id}` as any);
-          }
-        } catch (e) {}
-      }}
+      onMessage={onWebViewMessage}
     />
   );
 
