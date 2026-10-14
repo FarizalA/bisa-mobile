@@ -98,7 +98,8 @@ window.updateRadius=function(km){
   try{
     radiusKm=km;
     drawRadiusCircle();
-    map.setView([userLat,userLng],zoomForKm(km),{animate:false});
+    // Sengaja TIDAK zoom-out: biar user yang atur zoom sendiri.
+    // Radius cuma memperbesar lingkaran cakupan; peta tetap pada zoom terkini.
   }catch(e){}
 };
 
@@ -109,7 +110,9 @@ window.updateUserLoc=function(lat,lng){
     userLat=lat; userLng=lng;
     userMarker.setLatLng([lat,lng]);
     drawRadiusCircle();
-    map.setView([lat,lng],zoomForKm(radiusKm),{animate:false});
+    // Tetap pakai zoom terkini user, jangan paksa zoom-out mengikuti radius.
+    var cur=map.getZoom();
+    map.setView([lat,lng], cur||15, {animate:false});
   }catch(e){}
 };
 
