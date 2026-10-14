@@ -553,8 +553,28 @@ export default function AktivitasPage() {
         if (newDeskripsi.includes("[EXPIRES_AT]:")) newDeskripsi = newDeskripsi.replace(/\[EXPIRES_AT\]:\s*\d+/, `[EXPIRES_AT]: ${newExpiresAt}`);
         else newDeskripsi += `\n[EXPIRES_AT]: ${newExpiresAt}`;
         try {
-          const { error } = await supabase.from("pekerjaan_bisa").update({ status: "mencari_mitra", deskripsi: newDeskripsi }).eq("id", job.id);
-          if (error) throw error;
+          // Guard: jangan hidupkan lagi pesanan yang sudah dibatalkan / refunded /
+          // escrow sudah dicairkan. Tanpa guard ini "Perpanjang" bisa me-resurrect
+          // pesanan yang dananya sudah kembali ke Klien.
+          const { data: revived, error: revErr } = await supabase
+            .from("pekerjaan_bisa")
+            .update({ status: "mencari_mitra", deskripsi: newDeskripsi })
+            .eq("id", job.id)
+            .not("status", "in", "(dibatalkan,selesai,ditolak,expired,dalam_sengketa)")
+            .not("payment_status", "in", "(refunded,released,cancelled,cod_cancelled,cod_completed)")
+            .select("id");
+          if (revErr) throw revErr;
+          if (!revived || revived.length === 0) {
+            setConfirmSheet({
+              title: "Tidak Bisa Diperpanjang",
+              message: "Pesanan ini sudah dibatalkan / dananya sudah dikembalikan, jadi tidak bisa diaktifkan kembali.",
+              confirmText: "Mengerti",
+              cancelText: "",
+              onConfirm: () => setConfirmSheet(null),
+            });
+            if (user?.id) fetchMyJobs(user.id, pageLimit);
+            return;
+          }
           setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, status: "mencari_mitra", deskripsi: newDeskripsi } : j)));
           setConfirmSheet({ title: "Sukses", message: "Postingan aktif kembali selama 24 jam.", confirmText: "OK", cancelText: "", onConfirm: () => setConfirmSheet(null) });
         } catch (e: any) { Alert.alert("Error", e.message || "Gagal memperpanjang."); }

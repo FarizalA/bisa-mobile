@@ -357,11 +357,7 @@ export default function AktivitasJobCard({
         </TouchableOpacity>
       )}
 
-      {job.status === "dibatalkan" && (
-        <TouchableOpacity onPress={() => onPerpanjangWaktu(job)} activeOpacity={0.88} className="w-full py-2.5 rounded-xl bg-gray-100 border border-gray-200 items-center justify-center flex-row gap-1.5">
-          <RotateCcw size={14} color="#374151" /><Text className="text-xs font-bold text-gray-700">Posting Ulang / Perpanjang 24 Jam</Text>
-        </TouchableOpacity>
-      )}
+
     </View>
   );
 }

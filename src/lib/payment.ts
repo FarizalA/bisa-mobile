@@ -80,6 +80,18 @@ export async function processOrderRefund(
       job.payment_status === "cancelled" ||
       job.status === "selesai";
     if (alreadyFinal) {
+      // Dana sudah pernah diproses (refund cair / escrow released / sudah selesai).
+      // JANGAN gerakkan saldo lagi. Tapi kalau status masih non-final (mis. job lama
+      // yang kembali di-"Perpanjang" jadi mencari_mitra), paksa jadi dibatalkan
+      // supaya tidak muncul lagi sebagai pesanan aktif.
+      const statusStillActive = !["dibatalkan", "selesai", "ditolak", "expired"].includes(String(job.status));
+      if (statusStillActive) {
+        const { error: forceErr } = await supabase
+          .from("pekerjaan_bisa")
+          .update({ status: "dibatalkan", cancel_requested_at: null, cancel_reason: null, alasan_penolakan: null })
+          .eq("id", numJobId);
+        if (forceErr) throw new Error(`Gagal menutup pesanan: ${forceErr.message}`);
+      }
       return {
         success: true,
         refunded: job.payment_status === "refunded",
