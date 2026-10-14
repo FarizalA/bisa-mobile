@@ -47,6 +47,9 @@ export default ({ config }) => ({
     },
     plugins: [
       "expo-router",
+      // Wajib agar Android 12+ (API 31) memakai splash-icon.png + backgroundColor,
+      // bukan windowBackground legacy yang bikin sistem tampil grid default.
+      "expo-splash-screen",
       [
         "expo-notifications",
         {

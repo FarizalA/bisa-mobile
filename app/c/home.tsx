@@ -88,6 +88,14 @@ export default function ClientHomePage() {
     [filteredProviders, rekomendasiVisible]
   );
 
+  // Kartu "mitra aktif": 4 avatar pertama + sisa jumlah
+  const onlineList = availableProviders ?? filteredProviders;
+  const heroProviders = React.useMemo(() => (onlineList ?? []).slice(0, 4), [onlineList]);
+  const remainingCount = React.useMemo(
+    () => Math.max(0, (onlineList?.length ?? 0) - 4),
+    [onlineList]
+  );
+
   const renderRekomendasiItem = useCallback(
     ({ item }: { item: any }) => (
       <View style={{ paddingHorizontal: 6, paddingBottom: 12 }}>
@@ -196,6 +204,61 @@ export default function ClientHomePage() {
                   </View>
                 </View>
               </View>
+
+              {/* Kartu mitra aktif di sekitar */}
+              {heroProviders.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => router.push("/c/radar" as any)}
+                  activeOpacity={0.85}
+                  className="mx-4 mt-5 bg-white rounded-2xl px-4 py-3.5 flex-row items-center"
+                  style={{
+                    elevation: 2,
+                    shadowColor: "#0F172A",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 10,
+                  }}
+                >
+                  <View className="flex-row mr-3">
+                    {heroProviders.map((p: any, i: number) => (
+                      <View
+                        key={`hero-${p.id}`}
+                        className="rounded-full border-2 border-white bg-white overflow-hidden"
+                        style={{ width: 34, height: 34, marginLeft: i === 0 ? 0 : -12, zIndex: 10 - i }}
+                      >
+                        <Image
+                          source={p.face_url ? { uri: p.face_url } : require("../../assets/mascot.png")}
+                          style={{ width: "100%", height: "100%" }}
+                          contentFit="cover"
+                          transition={150}
+                          cachePolicy="memory-disk"
+                        />
+                      </View>
+                    ))}
+                    {remainingCount > 0 && (
+                      <View
+                        className="rounded-full border-2 border-white bg-[#FF6B00] items-center justify-center"
+                        style={{ width: 34, height: 34, marginLeft: -12 }}
+                      >
+                        <Text className="text-white text-[10px] font-semibold">+{remainingCount}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="flex-1">
+                    <Text className="text-[13px] font-semibold text-slate-900">
+                      {onlineList?.length ?? 0} mitra aktif di sekitarmu
+                    </Text>
+                    <Text className="text-[11px] text-gray-500 mt-0.5">
+                      Siap ditangani hari ini juga
+                    </Text>
+                  </View>
+
+                  <View className="w-7 h-7 rounded-full bg-orange-50 items-center justify-center">
+                    <ChevronRight size={16} color="#ff6b00" strokeWidth={2.5} />
+                  </View>
+                </TouchableOpacity>
+              )}
 
               {/* 3. Segment Switcher Tabs */}
               <View className="px-4 mt-2">

@@ -1,12 +1,16 @@
-import { Stack, router } from "expo-router";
+import { Stack, router, SplashScreen } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SupabaseProvider } from "../src/contexts/SupabaseContext";
 import { PopupProvider } from "../src/components/PopupProvider.native";
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View, StatusBar, Platform } from "react-native";
+
 import { usePushToken } from "../src/hooks/usePushToken";
 import "../global.css";
+
+// Tahan splash native (assets/splash-icon.png) sampai konten siap
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Lazy-load expo-notifications agar tidak crash di Expo Go (SDK 53+ hapus remote push di Expo Go)
 let Notifications: any = null;
@@ -81,6 +85,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontError) console.warn("Font load error (fallback ke system font):", fontError);
   }, [fontError]);
+
+  // Sembunyikan splash native begitu konten siap
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
 
   if (!ready) {
     return (

@@ -178,15 +178,15 @@ export default function MitraPublicProfilePage() {
           </View>
         </View>
 
-        <View className="px-4 -mt-8 z-10 w-full">
+        <View className="px-3 -mt-8 z-10 w-full">
           <View
             className="bg-white rounded-[24px] p-5 border border-gray-100/80"
             style={{
-              elevation: 6,
+              elevation: 2,
               shadowColor: "#000",
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.06,
-              shadowRadius: 30,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.04,
+              shadowRadius: 12,
             }}
           >
             <View className="flex-row items-start gap-4">

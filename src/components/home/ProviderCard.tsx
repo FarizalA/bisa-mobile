@@ -145,7 +145,7 @@ function ProviderCardComponent({
     );
   }
 
-  // Grid - Masonry (Dynamic Height)
+  // Grid - Masonry (tinggi dikunci agar semua card sama)
   return (
     <TouchableOpacity
       onPress={() => {
@@ -154,7 +154,7 @@ function ProviderCardComponent({
       }}
       activeOpacity={0.85}
       className="w-full bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col"
-      style={{ minHeight: 275, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 }}
+      style={{ height: 268, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 }}
     >
       <View className="relative h-32 bg-gray-200 w-full overflow-hidden">
         <Image
@@ -168,24 +168,33 @@ function ProviderCardComponent({
         />
       </View>
 
-      <View className="p-3.5 flex flex-col flex-1" style={{ minHeight: 145 }}>
-        <Text className="text-[14px] font-bold text-slate-800 leading-tight line-clamp-2 mb-1.5" numberOfLines={2}>
-          {skillText}
-        </Text>
-        <Text className="text-[13px] text-gray-500 font-medium truncate mb-2" numberOfLines={1}>
-          {item.name}
-        </Text>
+      <View className="p-3.5 flex-col" style={{ height: 140 }}>
+        {/* Nama mitra: slot 18px, selalu tampil */}
+        <View style={{ height: 18 }} className="flex-row items-center">
+          <Text className="text-[13px] font-bold text-slate-800 truncate flex-1" numberOfLines={1}>
+            {item.name || "Mitra BISA"}
+          </Text>
+        </View>
 
-        {item.is_trusted ? (
-          <View className="mb-3 flex-row">
+        {/* Layanan: slot 30px, max 2 baris */}
+        <View style={{ height: 30 }} className="flex-row items-start">
+          <Text className="text-[11px] font-medium text-gray-500 leading-[14px] flex-1" numberOfLines={2}>
+            {skillText}
+          </Text>
+        </View>
+
+        {/* Badge: slot 18px + margin */}
+        <View style={{ height: 18, marginTop: 6 }} className="flex-row items-center">
+          {item.is_trusted ? (
             <View className="bg-[#ffedd5] border border-[#fed7aa] px-2 py-0.5 rounded-full flex-row items-center gap-1">
               <MitraUnggulanBadgeIcon size={12} />
               <Text className="text-[#c2410c] text-[9px] font-bold">Mitra Unggulan</Text>
             </View>
-          </View>
-        ) : null}
+          ) : null}
+        </View>
 
-        <View className="mt-auto">
+        {/* Footer: rata bawah */}
+        <View style={{ marginTop: "auto" }}>
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center gap-1">
               <Text className="text-yellow-400 text-[15px] leading-none">★</Text>
