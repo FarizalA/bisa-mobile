@@ -71,7 +71,7 @@ export default function ProviderBottomNav({
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "home" ? "bg-emerald-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "home" ? "#ecfdf5" : "transparent" }}>
           <Home size={20} color={active === "home" ? "#059669" : "#9ca3af"} />
         </View>
         <Text
@@ -89,7 +89,7 @@ export default function ProviderBottomNav({
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "cari" ? "bg-emerald-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "cari" ? "#ecfdf5" : "transparent" }}>
           <Search size={20} color={active === "cari" ? "#059669" : "#9ca3af"} />
         </View>
         <Text
@@ -107,7 +107,7 @@ export default function ProviderBottomNav({
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1 relative"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center relative ${active === "aktivitas" ? "bg-emerald-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: active === "aktivitas" ? "#ecfdf5" : "transparent" }}>
           <Briefcase size={20} color={active === "aktivitas" ? "#059669" : "#9ca3af"} />
           {count > 0 && (
             <View className="absolute -top-1 -right-1 bg-emerald-600 w-4 h-4 rounded-full items-center justify-center border border-white">
@@ -130,7 +130,7 @@ export default function ProviderBottomNav({
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "chat" ? "bg-emerald-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "chat" ? "#ecfdf5" : "transparent" }}>
           <MessageSquare size={20} color={active === "chat" ? "#059669" : "#9ca3af"} />
         </View>
         <Text
@@ -148,7 +148,7 @@ export default function ProviderBottomNav({
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "profil" ? "bg-emerald-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "profil" ? "#ecfdf5" : "transparent" }}>
           <User size={20} color={active === "profil" ? "#059669" : "#9ca3af"} />
         </View>
         <Text

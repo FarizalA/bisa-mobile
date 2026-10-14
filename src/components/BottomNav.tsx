@@ -63,7 +63,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "home" ? "bg-orange-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "home" ? "#fff7ed" : "transparent" }}>
           <Home size={20} color={active === "home" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text
@@ -81,7 +81,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "radar" ? "bg-orange-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "radar" ? "#fff7ed" : "transparent" }}>
           <Compass size={20} color={active === "radar" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text
@@ -111,7 +111,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1 relative"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center relative ${active === "aktivitas" ? "bg-orange-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: active === "aktivitas" ? "#fff7ed" : "transparent" }}>
           <Briefcase size={20} color={active === "aktivitas" ? "#ff6b00" : "#9ca3af"} />
           {activeJobsCount > 0 && (
             <View className="absolute -top-1 -right-1 bg-[#ff6b00] w-4 h-4 rounded-full items-center justify-center border border-white">
@@ -134,7 +134,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.8}
         className="flex-1 items-center justify-center py-1"
       >
-        <View className={`w-9 h-9 rounded-full items-center justify-center ${active === "profil" ? "bg-orange-50" : ""}`}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "profil" ? "#fff7ed" : "transparent" }}>
           <User size={20} color={active === "profil" ? "#ff6b00" : "#9ca3af"} />
         </View>
         <Text
