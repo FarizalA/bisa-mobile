@@ -118,6 +118,27 @@ export async function processOrderRefund(
     if (isEscrowPaid) {
       const refundAmount = Number(job.agreed_price) || Number(String(job.budget || "").replace(/\D/g, "")) || 0;
 
+      // ATOMIC CLAIM: tandai pesanan sebagai diproses LEBIH DULU dengan guard payment_status
+      // di klausa WHERE. Kalau tidak ada baris yang berubah, artinya sudah pernah diproses
+      // oleh pemanggilan lain (race / klik ganda) -> JANGAN kredit saldo lagi.
+      // Ini menutup race condition karena guard & tulis jadi satu operasi atomik di DB.
+      const { data: claimed, error: claimErr } = await supabase
+        .from("pekerjaan_bisa")
+        .update({ status: "dibatalkan", payment_status: "refunded" })
+        .eq("id", numJobId)
+        .in("payment_status", ["escrow_held", "paid", "settlement", "capture", "authorized"])
+        .select("id");
+      if (claimErr) throw new Error(`Gagal claim pembatalan: ${claimErr.message}`);
+
+      if (!claimed || claimed.length === 0) {
+        return {
+          success: true,
+          refunded: false,
+          amount: 0,
+          message: "Pesanan sudah diproses sebelumnya (refund tidak diulang).",
+        };
+      }
+
       if (refundAmount > 0 && job.pelanggan_id) {
         // Ambil data saldo pelanggan saat ini
         const { data: clientUser, error: cuErr } = await supabase
@@ -155,12 +176,6 @@ export async function processOrderRefund(
           }
         }
       }
-
-      const { error: stErr } = await supabase
-        .from("pekerjaan_bisa")
-        .update({ status: "dibatalkan", payment_status: "refunded" })
-        .eq("id", numJobId);
-      if (stErr) throw new Error(`Gagal update status pekerjaan: ${stErr.message}`);
 
       return {
         success: true,
