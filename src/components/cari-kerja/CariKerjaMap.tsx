@@ -90,7 +90,8 @@ function CariKerjaMapWeb({ logic }: { logic: CariKerjaLogic }) {
               if (btn) btn.onclick = () => setSelectedJob(j);
             }, 0);
           });
-          m.on("click", () => setSelectedJob(j));
+          // Sengaja TANPA handler click langsung: klik marker hanya buka popup ringkas,
+          // modal detail baru muncul setelah user menekan tombol "Lihat Detail" (1:1 native).
         });
 
         setTimeout(() => map.invalidateSize(), 120);
