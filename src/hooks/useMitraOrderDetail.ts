@@ -105,6 +105,17 @@ export function useMitraOrderDetail(jobId: string) {
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeActing, setDisputeActing] = useState(false);
 
+  // Confirm dialog (Alert.alert + tombol = no-op di web, jadi pakai modal sendiri)
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    confirmText?: string;
+    destructive?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+  const askConfirm = useCallback((cfg: typeof confirmConfig) => setConfirmConfig(cfg), []);
+
+
   // Countdowns & fee
   const [countdown, setCountdown] = useState<string | null>(null);
   const [offerCountdown, setOfferCountdown] = useState<string | null>(null);
@@ -699,6 +710,10 @@ export function useMitraOrderDetail(jobId: string) {
     offerCountdown,
     offerExpired,
     cancelCountdown,
+    // confirm
+    confirmConfig,
+    setConfirmConfig,
+    askConfirm,
     // modal visibility
     showDeliveryModal,
     setShowDeliveryModal,

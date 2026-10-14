@@ -13,6 +13,15 @@ import {
 } from "react-native";
 import { FileText, X, Camera, CheckCircle2, Clock, Handshake } from "lucide-react-native";
 
+export type ConfirmConfig = {
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+};
+
 export type OrderModalProps = {
   show?: boolean;
   onClose?: () => void;
@@ -200,6 +209,52 @@ export function RejectModal({
 /* ------------------------------------------------------------------ */
 /* Nice Alert — premium, auto-close 3s untuk sukses                   */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Confirm Modal — pengganti Alert.alert button (no-op di web)         */
+/* ------------------------------------------------------------------ */
+export function ConfirmModal({
+  show,
+  onClose,
+  config,
+}: {
+  show: boolean;
+  onClose: () => void;
+  config: ConfirmConfig | null;
+}) {
+  if (!config) return null;
+  const { title, message, confirmText = "Ya, Lanjutkan", cancelText = "Batal", destructive, onConfirm } = config;
+
+  return (
+    <Modal visible={show} transparent animationType="fade" onRequestClose={onClose}>
+      <View className="flex-1 bg-black/50 items-center justify-center px-4">
+        <View className="bg-white rounded-[24px] w-full max-w-sm p-5 gap-3.5">
+          <View className="flex-row items-center gap-2">
+            <View className={`w-9 h-9 rounded-full items-center justify-center ${destructive ? "bg-red-100" : "bg-emerald-100"}`}>
+              {destructive ? <X size={18} color="#dc2626" /> : <CheckCircle2 size={18} color="#059669" />}
+            </View>
+            <Text className="font-black text-gray-900 text-sm flex-1">{title}</Text>
+          </View>
+
+          <Text className="text-xs text-gray-600 leading-relaxed">{message}</Text>
+
+          <View className="flex-row gap-2 mt-1">
+            <TouchableOpacity onPress={onClose} className="flex-1 py-3 rounded-full border border-gray-200 items-center justify-center">
+              <Text className="text-xs font-bold text-gray-700">{cancelText}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onConfirm}
+              disabled={!onConfirm}
+              className={`flex-1 py-3 rounded-full items-center justify-center shadow-md ${destructive ? "bg-red-600" : "bg-emerald-600"}`}
+            >
+              <Text className="text-xs font-black text-white">{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function NiceAlertModal({ alert, onCloseAlert }: OrderModalProps) {
   if (!alert) return null;
   const bg =

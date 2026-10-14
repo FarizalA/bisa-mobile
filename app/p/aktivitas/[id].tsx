@@ -28,6 +28,7 @@ import { formatRupiah } from "../../../src/lib/payment";
 import { fmtDate } from "../../../src/lib/invoice";
 import { useMitraOrderDetail } from "../../../src/hooks/useMitraOrderDetail";
 import {
+  ConfirmModal,
   DeliveryModal,
   DisputeModal,
   MutualCancelModal,
@@ -457,14 +458,16 @@ export default function MitraOrderDetailPage() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() =>
-                  Alert.alert(
-                    "Setujui Pembatalan?",
-                    "Saldo akan dikembalikan secara penuh ke Klien dan pesanan akan ditutup.",
-                    [
-                      { text: "Batal", style: "cancel" },
-                      { text: "Ya, Setujui", style: "destructive", onPress: d.handleMitraApproveCancel },
-                    ]
-                  )
+                  d.askConfirm({
+                    title: "Setujui Pembatalan?",
+                    message: "Saldo akan dikembalikan secara penuh ke Klien dan pesanan akan ditutup.",
+                    confirmText: "Ya, Setujui",
+                    destructive: true,
+                    onConfirm: () => {
+                      d.setConfirmConfig(null);
+                      d.handleMitraApproveCancel();
+                    },
+                  })
                 }
                 disabled={d.cancelResponding}
                 className="flex-1 py-3.5 rounded-full bg-red-600 items-center justify-center shadow-md"
@@ -566,6 +569,12 @@ export default function MitraOrderDetailPage() {
       <NiceAlertModal
         alert={d.alertInfo}
         onCloseAlert={() => d.setAlertInfo((p) => ({ ...p, show: false }))}
+      />
+
+      <ConfirmModal
+        show={!!d.confirmConfig}
+        onClose={() => d.setConfirmConfig(null)}
+        config={d.confirmConfig as any}
       />
     </SafeAreaView>
   );
