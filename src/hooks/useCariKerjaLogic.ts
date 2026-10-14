@@ -172,12 +172,54 @@ export function useCariKerjaLogic() {
         filter_kategori: activeCategory,
       });
 
-      if (jobsError) throw jobsError;
+      let rawJobs: any[] | null = null;
 
-      const filtered = (jobsData || []).filter((job: any) => {
+      if (jobsError) {
+        // Fallback: RPC bisa gagal karena mismatch tipe enum (42804) di sisi DB.
+        // Ambil langsung dari tabel lalu hitung jarak di sisi klien agar app tetap jalan.
+        console.warn("[fetchNearbyJobs] RPC gagal, pakai fallback tabel:", jobsError.message);
+        const { data: fb, error: fbErr } = await supabase
+          .from("pekerjaan_bisa")
+          .select("*, pelanggan:users_bisa!pelanggan_id(name, face_url)")
+          .eq("status", "mencari_mitra")
+          .not("latitude", "is", null)
+          .not("longitude", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(200);
+
+        if (fbErr) throw fbErr;
+
+        const R = 6371;
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        rawJobs = (fb || []).map((j: any) => {
+          const dLat = toRad(j.latitude - mitraData.latitude);
+          const dLon = toRad(j.longitude - mitraData.longitude);
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(mitraData.latitude)) *
+              Math.cos(toRad(j.latitude)) *
+              Math.sin(dLon / 2) ** 2;
+          const distance_km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return {
+            ...j,
+            pelanggan_name: j.pelanggan?.name || "Pelanggan",
+            pelanggan_face_url: j.pelanggan?.face_url || null,
+            distance_km,
+          };
+        });
+      } else {
+        rawJobs = jobsData;
+      }
+
+      const filtered = (rawJobs || []).filter((job: any) => {
         if (String(job.pelanggan_id) === String(stored.id)) return false;
         const m = job.deskripsi?.match(/\[EXPIRES_AT\]:\s*(\d+)/);
         if (m && Date.now() > parseInt(m[1], 10)) return false;
+        // Filter radius & kategori dipakai saat fallback (RPC sudah memfilternya)
+        if (jobsError) {
+          if (typeof job.distance_km === "number" && job.distance_km > radius) return false;
+          if (activeCategory && activeCategory !== "Semua Jasa" && job.kategori !== activeCategory) return false;
+        }
         return true;
       });
       setJobs(filtered);

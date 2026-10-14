@@ -483,7 +483,7 @@ export default function MitraPublicProfilePage() {
                 ) : null}
               </View>
               {paymentMethod === "COD" && codDonationEnabled && (
-                <View className="bg-amber-50/70 border border-amber-200 p-3 rounded-2xl gap-2.5 mb-3">
+                <View className="bg-amber-50 border border-amber-200 p-3 rounded-2xl mb-3" style={{ gap: 10 }}>
                   <View className="flex-row gap-2.5 items-start">
                     <View className="w-8 h-8 rounded-full bg-amber-500/10 items-center justify-center shrink-0"><Heart size={16} color="#D97706" /></View>
                     <View className="flex-1">
