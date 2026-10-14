@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
-import { KATEGORI_JASA } from "../../lib/categories";
+import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { type CariKerjaLogic } from "../../hooks/useCariKerjaLogic";
+import CariKerjaMapFilters from "./CariKerjaMapFilters";
 
 function radiusToZoom(radius: number) {
   if (radius >= 100) return 9;
@@ -14,7 +14,7 @@ function radiusToZoom(radius: number) {
 
 // WEB: Leaflet direct (tanpa iframe, tanpa WebView) — 1:1 screenshot OSM
 function CariKerjaMapWeb({ logic }: { logic: CariKerjaLogic }) {
-  const { mitraLoc, jobs, setSelectedJob, activeCategory, setActiveCategory, radius } = logic;
+  const { mitraLoc, jobs, setSelectedJob, radius } = logic;
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletReadyRef = useRef(false);
 
@@ -124,29 +124,7 @@ function CariKerjaMapWeb({ logic }: { logic: CariKerjaLogic }) {
       {/* @ts-ignore web div */}
       <div ref={mapRef} style={{ width: "100%", height: 520, minHeight: 520, background: "#e5e7eb" }} />
       <View style={{ position: "absolute", top: 12, left: 0, right: 0, paddingHorizontal: 16 } as any}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-          {KATEGORI_JASA.map((cat) => {
-            const isSelected = activeCategory === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                onPress={() => setActiveCategory(cat)}
-                activeOpacity={0.85}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: isSelected ? "#059669" : "#ffffff",
-                  shadowColor: "#000",
-                  shadowOpacity: 0.12,
-                  shadowRadius: 6,
-                } as any}
-              >
-                <Text style={{ fontSize: 12, fontWeight: "800", color: isSelected ? "#ffffff" : "#374151" } as any}>{cat}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <CariKerjaMapFilters logic={logic} />
       </View>
     </View>
   );
@@ -156,7 +134,7 @@ import { WebView } from "react-native-webview";
 import { generateCariKerjaLeafletHtml } from "../../utils/cariKerjaLeafletHtml";
 
 export default function CariKerjaMap({ logic }: { logic: CariKerjaLogic }) {
-  const { viewMode, mitraLoc, jobs, setSelectedJob, radius, activeCategory, setActiveCategory } = logic;
+  const { viewMode, mitraLoc, jobs, setSelectedJob, radius } = logic;
   const webviewRef = useRef<any>(null);
 
   if (viewMode !== "map") return null;
@@ -194,21 +172,7 @@ export default function CariKerjaMap({ logic }: { logic: CariKerjaLogic }) {
         }}
       />
       <View className="absolute top-3 left-0 right-0 px-4">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-          {KATEGORI_JASA.map((cat) => {
-            const isSelected = activeCategory === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                onPress={() => setActiveCategory(cat)}
-                activeOpacity={0.85}
-                className={`px-3 py-1.5 rounded-full shadow-md ${isSelected ? "bg-emerald-600" : "bg-white"}`}
-              >
-                <Text className={`text-xs font-bold ${isSelected ? "text-white" : "text-gray-700"}`}>{cat}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <CariKerjaMapFilters logic={logic} />
       </View>
     </View>
   );
