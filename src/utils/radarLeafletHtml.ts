@@ -207,6 +207,25 @@ function collapseSpiderfy(){
 function expandSpiderfy(leaderEntry){
   var group=[leaderEntry].concat(leaderEntry.followers);
   if(group.length<2) return;
+  var z=map.getZoom();
+  // 1. Jika peta belum zoom dekat (< 16), zoom in ke sebaran pin
+  if(z<16){
+    var bounds=L.latLngBounds(group.map(function(e){return e.latlng;}));
+    var sw=bounds.getSouthWest(), ne=bounds.getNorthEast();
+    var isSamePoint=sw.distanceTo(ne)<25;
+    if(isSamePoint){
+      map.setView(leaderEntry.latlng, 17, {animate:true});
+    } else {
+      map.fitBounds(bounds.pad(0.3), {maxZoom:16,animate:true});
+    }
+    return;
+  }
+  // 2. Di zoom dekat (z >= 16): jika > 8 pin, buka Bottom Sheet daftar mitra (bukan donat orbit)
+  if(group.length>8){
+    var many=group.map(function(e){return e.provider;});
+    sendToRN({type:'OPEN_CLUSTER_LIST',providers:many,count:group.length,lat:leaderEntry.latlng.lat,lng:leaderEntry.latlng.lng});
+    return;
+  }
   expandedLeaderId=leaderEntry.provider.id;
   expandedFollowers=leaderEntry.followers.slice();
 

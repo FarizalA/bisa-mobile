@@ -92,6 +92,8 @@ export default function RadarPage() {
   const [filterRating, setFilterRating] = useState<number>(0);
   const [onlyTrusted, setOnlyTrusted] = useState<boolean>(false);
   const [activeDropdown, setActiveDropdown] = useState<"kategori" | "radius" | "harga" | "rating" | null>(null);
+  // Cluster list (spiderfy >8) — disimpan terpisah dari sheet profil tunggal.
+  const [clusterSheet, setClusterSheet] = useState<{ count: number; lat: number; lng: number; providers: any[] } | null>(null);
   const [sheetMitra, setSheetMitra] = useState<any | null>(null);
 
   // Reset ready flag tiap kali peta di-mount ulang (tab fokus kembali).
@@ -153,9 +155,15 @@ export default function RadarPage() {
         }
         if (data && data.type === "OPEN_PROFILE_SHEET" && data.id) {
           setSheetMitra(data);
+          setClusterSheet(null);
+        }
+        if (data && data.type === "OPEN_CLUSTER_LIST" && Array.isArray(data.providers)) {
+          setClusterSheet({ count: data.count || data.providers.length, lat: data.lat, lng: data.lng, providers: data.providers });
+          setSheetMitra(null);
         }
         if (data && data.type === "MAP_MOVED") {
           setSheetMitra(null);
+          setClusterSheet(null);
         }
       } catch (e) {}
     };
@@ -374,9 +382,15 @@ export default function RadarPage() {
         }
         if (data.type === "OPEN_PROFILE_SHEET" && data.id) {
           setSheetMitra(data);
+          setClusterSheet(null);
+        }
+        if (data.type === "OPEN_CLUSTER_LIST" && Array.isArray(data.providers)) {
+          setClusterSheet({ count: data.count || data.providers.length, lat: data.lat, lng: data.lng, providers: data.providers });
+          setSheetMitra(null);
         }
         if (data.type === "MAP_MOVED") {
           setSheetMitra(null);
+          setClusterSheet(null);
         }
       } catch {}
     },
@@ -561,6 +575,66 @@ export default function RadarPage() {
                   <Text className="text-gray-700 font-bold text-xs">Tutup</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Bottom Sheet daftar mitra (ketika pin bertumpuk > 8) */}
+        {clusterSheet ? (
+          <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, zIndex: 65, elevation: 16 }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => setClusterSheet(null)} className="flex-1 bg-black/30" />
+            <View className="bg-white rounded-t-3xl border-t border-gray-100 shadow-[0_-6px_24px_rgba(0,0,0,0.15)] px-4 pt-3 pb-6 max-h-[70%]">
+              <View className="w-10 h-1 rounded-full bg-gray-300 self-center mb-3" />
+              <View className="flex-row items-center justify-between mb-3 px-1">
+                <View>
+                  <Text className="text-base font-extrabold text-gray-900">{clusterSheet.count} Mitra di Titik Ini</Text>
+                  <Text className="text-xs text-gray-500 font-medium">Pilih mitra untuk melihat profil</Text>
+                </View>
+                <TouchableOpacity onPress={() => setClusterSheet(null)} className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center">
+                  <X size={16} color="#4b5563" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView className="max-h-[360px]" showsVerticalScrollIndicator={true}>
+                {clusterSheet.providers.map((p: any, idx: number) => {
+                  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name || "Mitra")}&background=ea580c&color=ffffff&bold=true`;
+                  const faceUrl = p.face_url && String(p.face_url).startsWith("http") ? p.face_url : fallbackAvatar;
+                  return (
+                    <TouchableOpacity
+                      key={p.id || idx}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setClusterSheet(null);
+                        router.push(`/profil/${p.id}` as any);
+                      }}
+                      className="flex-row items-center gap-3 py-3 border-b border-gray-100"
+                    >
+                      <Image
+                        source={{ uri: faceUrl }}
+                        style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: "#f1f5f9" }}
+                        resizeMode="cover"
+                      />
+                      <View className="flex-1 min-w-0">
+                        <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>{p.name || "Mitra"}</Text>
+                        <Text className="text-xs text-gray-500 font-medium" numberOfLines={1}>{p.keahlian || p.kategori || "Penyedia Jasa"}</Text>
+                        <View className="flex-row items-center gap-2 mt-0.5">
+                          <View className="flex-row items-center gap-1">
+                            <Star size={10} color="#f59e0b" fill="#f59e0b" />
+                            <Text className="text-[10px] font-bold text-amber-800">{p.rating ? Number(p.rating).toFixed(1) : "Baru"}</Text>
+                          </View>
+                          {p.distance_km != null && p.distance_km < 999999 ? (
+                            <Text className="text-[10px] font-bold text-orange-600">• {Number(p.distance_km).toFixed(1)} km</Text>
+                          ) : null}
+                          {p.base_price ? (
+                            <Text className="text-[10px] font-bold text-gray-700">• Rp{Number(p.base_price).toLocaleString("id-ID")}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                      <ChevronRight size={16} color="#9ca3af" />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
           </View>
         ) : null}
