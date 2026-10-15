@@ -168,8 +168,10 @@ export default function DaftarPage() {
     }
   };
 
-  // Upload berkas ke Supabase Storage
-  const uploadFile = async (uri: string, prefix: string) => {
+  // Upload berkas ke Supabase Storage.
+  // `bucket` default `kyc_dokumen` (private, untuk verifikasi admin).
+  // Untuk swafoto, kita juga unggah ke `profile_photos` (publik) sebagai foto profil.
+  const uploadFile = async (uri: string, prefix: string, bucket: "kyc_dokumen" | "profile_photos" = "kyc_dokumen") => {
     try {
       let ext = "jpg";
       if (uri.startsWith("data:image/png")) ext = "png";
@@ -200,7 +202,7 @@ export default function DaftarPage() {
       const contentType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("kyc_dokumen")
+        .from(bucket)
         .upload(fileName, payload, {
           contentType,
           // Nama file selalu unik (timestamp + acak), jadi tidak perlu upsert.
@@ -220,6 +222,11 @@ export default function DaftarPage() {
           return { url: uri, error: null };
         }
         return { url: null, error: uploadError.message };
+      }
+      // Bucket public (foto profil) → simpan URL publik.
+      if (bucket === "profile_photos") {
+        const { data: pub } = supabase.storage.from("profile_photos").getPublicUrl(`profiles/${fileName}`);
+        return { url: pub.publicUrl, error: null };
       }
       // Dokumen KYC disimpan di bucket private. Yang disimpan ke DB adalah path
       // objeknya (bukan URL publik), karena URL publik bucket private tidak bisa
@@ -340,7 +347,17 @@ export default function DaftarPage() {
       if (!faceRes.url) {
         throw new Error("Gagal mengunggah Swafoto: " + (faceRes.error || "Kesalahan server"));
       }
-      const faceUrl = faceRes.url;
+      const selfieUrl = faceRes.url; // path di bucket KYC private (untuk verifikasi admin)
+
+      // Swafoto juga jadi foto profil publik. Bila unggahan ini gagal, pendaftaran
+      // tetap lanjut; user bisa ganti foto profilnya nanti dari halaman pengaturan.
+      let profileUrl: string | null = null;
+      try {
+        const profRes = await uploadFile(faceUri, "profile", "profile_photos");
+        profileUrl = profRes.url;
+      } catch (e) {
+        console.warn("Gagal menjadikan swafoto sebagai foto profil:", e);
+      }
 
       // 4. Insert data pengguna ke tabel `users_bisa`
       const { data, error: dbError } = await supabase
@@ -355,7 +372,8 @@ export default function DaftarPage() {
             address: address.trim(),
             alamat_singkat: alamatSingkat.trim(),
             ktp_url: ktpUrl,
-            face_url: faceUrl,
+            face_url: profileUrl || selfieUrl, // foto profil; fallback ke swafoto KYC
+            kyc_selfie_url: selfieUrl,        // swafoto verifikasi (tidak pernah ditimpa user)
             latitude: latitude,
             longitude: longitude,
             kyc_status: "Menunggu",
