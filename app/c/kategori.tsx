@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { View, RefreshControl, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
+import { ArrowUp } from "lucide-react-native";
 import { supabase } from "../../src/lib/supabase";
 import { getStoredUser } from "../../src/lib/user-storage";
 import { CATEGORIES, calculateDistance, PersonSearchIcon } from "../../src/components/kategori/KategoriConstants";
@@ -26,6 +27,8 @@ export default function KategoriPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const listRef = useRef<any>(null);
 
   useEffect(() => {
     if (params.q) {
@@ -209,12 +212,22 @@ export default function KategoriPage() {
       />
 
       {/* Shopify FlashList v2: auto-measure layout */}
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, position: "relative" }}>
         <FlashList
+          ref={listRef}
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            if (y > 350 && !showScrollTop) {
+              setShowScrollTop(true);
+            } else if (y <= 350 && showScrollTop) {
+              setShowScrollTop(false);
+            }
+          }}
+          scrollEventThrottle={32}
           data={filteredProviders}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 28, paddingHorizontal: 16, paddingTop: 12 }}
+          contentContainerStyle={{ paddingBottom: 36, paddingHorizontal: 16, paddingTop: 12 }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ff6b00"]} />}
           ListHeaderComponent={
@@ -254,6 +267,27 @@ export default function KategoriPage() {
             ) : null
           }
         />
+
+        {/* Tombol Melayang Panah Atas (Scroll to Top) */}
+        {showScrollTop && (
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            }}
+            activeOpacity={0.85}
+            className="absolute bottom-6 right-5 w-12 h-12 rounded-full bg-[#ff6b00] items-center justify-center shadow-lg border-2 border-white"
+            style={{
+              elevation: 8,
+              shadowColor: "#ea580c",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.35,
+              shadowRadius: 8,
+            }}
+          >
+            <ArrowUp size={22} color="white" strokeWidth={2.8} />
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
