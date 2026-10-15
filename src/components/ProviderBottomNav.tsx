@@ -9,6 +9,15 @@ import { getStoredUser } from "../lib/user-storage";
 
 type ProviderNavTab = "home" | "cari" | "aktivitas" | "chat" | "profil";
 
+// Indikator aktif = titik kecil di bawah label (tak ada kotak latar, tak jadi persegi).
+// Didefinisikan di module scope (bukan dalam render) agar tidak dibuat ulang tiap render.
+const Dot = ({ on, color }: { on: boolean; color: string }) =>
+  on ? (
+    <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: color, marginTop: 3 }} />
+  ) : (
+    <View style={{ width: 5, height: 5, marginTop: 3 }} />
+  );
+
 export default function ProviderBottomNav({
   active,
   activeJobsCount = 0,
@@ -62,18 +71,16 @@ export default function ProviderBottomNav({
 
   return (
     <View
-      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around shadow-lg"
+      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around"
       style={{ paddingBottom: Math.max(insets.bottom, 8) }}
     >
       {/* 1. Beranda */}
       <TouchableOpacity
         onPress={() => handlePress("home", "/p/home")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "home" ? "#ecfdf5" : "transparent" }}>
-          <Home size={20} color={active === "home" ? "#059669" : "#9ca3af"} />
-        </View>
+        <Home size={21} color={active === "home" ? "#059669" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "home" ? "font-black text-emerald-700" : "font-semibold text-gray-400"
@@ -81,17 +88,16 @@ export default function ProviderBottomNav({
         >
           Beranda
         </Text>
+        <Dot on={active === "home"} color="#059669" />
       </TouchableOpacity>
 
       {/* 2. Cari Job */}
       <TouchableOpacity
         onPress={() => handlePress("cari", "/p/cari-kerja")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "cari" ? "#ecfdf5" : "transparent" }}>
-          <Search size={20} color={active === "cari" ? "#059669" : "#9ca3af"} />
-        </View>
+        <Search size={21} color={active === "cari" ? "#059669" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "cari" ? "font-black text-emerald-700" : "font-semibold text-gray-400"
@@ -99,21 +105,22 @@ export default function ProviderBottomNav({
         >
           Cari Job
         </Text>
+        <Dot on={active === "cari"} color="#059669" />
       </TouchableOpacity>
 
       {/* 3. Aktivitas / Pekerjaan */}
       <TouchableOpacity
         onPress={() => handlePress("aktivitas", "/p/aktivitas")}
-        activeOpacity={0.8}
-        className="flex-1 items-center justify-center py-1 relative"
+        activeOpacity={0.7}
+        className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: active === "aktivitas" ? "#ecfdf5" : "transparent" }}>
-          <Briefcase size={20} color={active === "aktivitas" ? "#059669" : "#9ca3af"} />
-          {count > 0 && (
-            <View className="absolute -top-1 -right-1 bg-emerald-600 w-4 h-4 rounded-full items-center justify-center border border-white">
-              <Text className="text-white text-[9px] font-black">{count}</Text>
+        <View>
+          <Briefcase size={21} color={active === "aktivitas" ? "#059669" : "#9ca3af"} />
+          {count > 0 ? (
+            <View style={{ position: "absolute", top: -4, right: -9, backgroundColor: "#059669", width: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ffffff" }}>
+              <Text style={{ color: "#ffffff", fontSize: 9, fontWeight: "900" }}>{count}</Text>
             </View>
-          )}
+          ) : null}
         </View>
         <Text
           className={`text-[10px] mt-0.5 ${
@@ -122,17 +129,16 @@ export default function ProviderBottomNav({
         >
           Aktivitas
         </Text>
+        <Dot on={active === "aktivitas"} color="#059669" />
       </TouchableOpacity>
 
       {/* 4. Chat */}
       <TouchableOpacity
         onPress={() => handlePress("chat", "/p/chat")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "chat" ? "#ecfdf5" : "transparent" }}>
-          <MessageSquare size={20} color={active === "chat" ? "#059669" : "#9ca3af"} />
-        </View>
+        <MessageSquare size={21} color={active === "chat" ? "#059669" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "chat" ? "font-black text-emerald-700" : "font-semibold text-gray-400"
@@ -140,17 +146,16 @@ export default function ProviderBottomNav({
         >
           Chat
         </Text>
+        <Dot on={active === "chat"} color="#059669" />
       </TouchableOpacity>
 
       {/* 5. Profil */}
       <TouchableOpacity
         onPress={() => handlePress("profil", "/p/profil")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "profil" ? "#ecfdf5" : "transparent" }}>
-          <User size={20} color={active === "profil" ? "#059669" : "#9ca3af"} />
-        </View>
+        <User size={21} color={active === "profil" ? "#059669" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "profil" ? "font-black text-emerald-700" : "font-semibold text-gray-400"
@@ -158,6 +163,7 @@ export default function ProviderBottomNav({
         >
           Profil
         </Text>
+        <Dot on={active === "profil"} color="#059669" />
       </TouchableOpacity>
     </View>
   );

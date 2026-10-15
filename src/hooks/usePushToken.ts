@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 import * as Device from "expo-device";
 import { getBisaToken } from "../lib/bisa-token";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://bisa-admin.vercel.app";
+const BACKEND_URL = (process.env.EXPO_PUBLIC_API_URL || "https://bisa-admin.vercel.app").replace(/\/$/, "");
 
 // Lazy-load expo-notifications agar Expo Go (SDK 53+) tidak crash.
 let Notifications: any = null;

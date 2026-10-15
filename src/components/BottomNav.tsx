@@ -9,6 +9,15 @@ import { getStoredUser } from "../lib/user-storage";
 
 type NavTab = "home" | "radar" | "posting" | "aktivitas" | "profil";
 
+// Indikator aktif = titik kecil di bawah label (tak ada kotak latar, tak jadi persegi).
+// Didefinisikan di module scope (bukan dalam render) agar tidak dibuat ulang tiap render.
+const Dot = ({ on, color }: { on: boolean; color: string }) =>
+  on ? (
+    <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: color, marginTop: 3 }} />
+  ) : (
+    <View style={{ width: 5, height: 5, marginTop: 3 }} />
+  );
+
 export default function BottomNav({ active }: { active: NavTab }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -54,18 +63,16 @@ export default function BottomNav({ active }: { active: NavTab }) {
 
   return (
     <View
-      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around shadow-lg"
+      className="bg-white border-t border-gray-100 px-2 pt-1.5 flex-row items-center justify-around"
       style={{ paddingBottom: Math.max(insets.bottom, 8) }}
     >
       {/* 1. Beranda */}
       <TouchableOpacity
         onPress={() => handlePress("home", "/c/home")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "home" ? "#fff7ed" : "transparent" }}>
-          <Home size={20} color={active === "home" ? "#ff6b00" : "#9ca3af"} />
-        </View>
+        <Home size={21} color={active === "home" ? "#ff6b00" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "home" ? "font-black text-[#ff6b00]" : "font-semibold text-gray-400"
@@ -73,17 +80,16 @@ export default function BottomNav({ active }: { active: NavTab }) {
         >
           Beranda
         </Text>
+        <Dot on={active === "home"} color="#ff6b00" />
       </TouchableOpacity>
 
       {/* 2. Radar */}
       <TouchableOpacity
         onPress={() => handlePress("radar", "/c/radar")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "radar" ? "#fff7ed" : "transparent" }}>
-          <Compass size={20} color={active === "radar" ? "#ff6b00" : "#9ca3af"} />
-        </View>
+        <Compass size={21} color={active === "radar" ? "#ff6b00" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "radar" ? "font-black text-[#ff6b00]" : "font-semibold text-gray-400"
@@ -91,6 +97,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         >
           Radar
         </Text>
+        <Dot on={active === "radar"} color="#ff6b00" />
       </TouchableOpacity>
 
       {/* 3. FAB TENGAH: POSTING */}
@@ -99,7 +106,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         activeOpacity={0.88}
         className="items-center justify-center -mt-6 px-1"
       >
-        <View className="w-13 h-13 w-[52px] h-[52px] rounded-full bg-[#ff6b00] items-center justify-center border-4 border-white shadow-lg">
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: "#ff6b00", alignItems: "center", justifyContent: "center", borderWidth: 4, borderColor: "#ffffff", elevation: 4 }}>
           <Plus size={26} color="#ffffff" strokeWidth={3} />
         </View>
         <Text className="text-[10px] font-black text-gray-800 mt-0.5">Posting</Text>
@@ -108,16 +115,16 @@ export default function BottomNav({ active }: { active: NavTab }) {
       {/* 4. Aktivitas / Pekerjaan */}
       <TouchableOpacity
         onPress={() => handlePress("aktivitas", "/c/aktivitas")}
-        activeOpacity={0.8}
-        className="flex-1 items-center justify-center py-1 relative"
+        activeOpacity={0.7}
+        className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: active === "aktivitas" ? "#fff7ed" : "transparent" }}>
-          <Briefcase size={20} color={active === "aktivitas" ? "#ff6b00" : "#9ca3af"} />
-          {activeJobsCount > 0 && (
-            <View className="absolute -top-1 -right-1 bg-[#ff6b00] w-4 h-4 rounded-full items-center justify-center border border-white">
-              <Text className="text-white text-[9px] font-black">{activeJobsCount}</Text>
+        <View>
+          <Briefcase size={21} color={active === "aktivitas" ? "#ff6b00" : "#9ca3af"} />
+          {activeJobsCount > 0 ? (
+            <View style={{ position: "absolute", top: -4, right: -9, backgroundColor: "#ff6b00", width: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ffffff" }}>
+              <Text style={{ color: "#ffffff", fontSize: 9, fontWeight: "900" }}>{activeJobsCount}</Text>
             </View>
-          )}
+          ) : null}
         </View>
         <Text
           className={`text-[10px] mt-0.5 ${
@@ -126,17 +133,16 @@ export default function BottomNav({ active }: { active: NavTab }) {
         >
           Aktivitas
         </Text>
+        <Dot on={active === "aktivitas"} color="#ff6b00" />
       </TouchableOpacity>
 
       {/* 5. Profil */}
       <TouchableOpacity
         onPress={() => handlePress("profil", "/c/profil")}
-        activeOpacity={0.8}
+        activeOpacity={0.7}
         className="flex-1 items-center justify-center py-1"
       >
-        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: active === "profil" ? "#fff7ed" : "transparent" }}>
-          <User size={20} color={active === "profil" ? "#ff6b00" : "#9ca3af"} />
-        </View>
+        <User size={21} color={active === "profil" ? "#ff6b00" : "#9ca3af"} />
         <Text
           className={`text-[10px] mt-0.5 ${
             active === "profil" ? "font-black text-[#ff6b00]" : "font-semibold text-gray-400"
@@ -144,6 +150,7 @@ export default function BottomNav({ active }: { active: NavTab }) {
         >
           Profil
         </Text>
+        <Dot on={active === "profil"} color="#ff6b00" />
       </TouchableOpacity>
     </View>
   );

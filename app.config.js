@@ -8,11 +8,6 @@ export default ({ config }) => ({
     orientation: "portrait",
     icon: "./assets/icon1.png",
     userInterfaceStyle: "light",
-    splash: {
-      image: "./assets/splash-icon.png",
-      resizeMode: "contain",
-      backgroundColor: "#ff6b00",
-    },
     scheme: "bisa",
     newArchEnabled: true,
     ios: {
@@ -47,9 +42,17 @@ export default ({ config }) => ({
     },
     plugins: [
       "expo-router",
-      // Wajib agar Android 12+ (API 31) memakai splash-icon.png + backgroundColor,
-      // bukan windowBackground legacy yang bikin sistem tampil grid default.
-      "expo-splash-screen",
+      // Splash Android 12+ (API 31+). Config HARUS di props plugin ini,
+      // bukan format legacy top-level `splash: {...}` (plugin tidak membacanya → system tampil grid default).
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/splash-icon.png",
+          imageWidth: 200,
+          resizeMode: "contain",
+          backgroundColor: "#ff6b00",
+        },
+      ],
       [
         "expo-notifications",
         {

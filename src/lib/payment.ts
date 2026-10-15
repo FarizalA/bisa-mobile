@@ -1,6 +1,9 @@
 // Library Manajemen Pembayaran, Escrow, dan Komisi Developer untuk BISA Mobile
 import { supabase } from "./supabase";
 
+// Base URL backend (Vercel). Dipakai untuk semua operasi bernilai uang server-side.
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "https://bisa-admin.vercel.app").replace(/\/$/, "");
+
 export interface PaymentBreakdown {
   agreedPrice: number;
   appFee: number;
@@ -47,8 +50,9 @@ export function formatRupiah(amount: number): string {
 
 /**
  * Memproses refund saldo pesanan jika terjadi pembatalan (Mutual Cancel / Cancel).
- * Jika status pesanan adalah escrow_held / paid, dana agreed_price dikembalikan ke users_bisa.saldo pelanggan
- * dan dicatat di tabel transactions (kategori: 'refund') sehingga muncul di Dompet dan bisa ditarik.
+ * Delegasi ke backend `/api/order/action` (action: "refund") — backend yang memvalidasi
+ * dan mengkredit users_bisa.saldo pelanggan serta mencatatnya di tabel transactions.
+ * Client TIDAK menyentuh saldo secara langsung.
  */
 export async function processOrderRefund(
   jobId: number | string,
@@ -58,157 +62,27 @@ export async function processOrderRefund(
     const numJobId = Number(jobId);
     if (!numJobId) throw new Error("ID pesanan tidak valid");
 
-    const { data: job, error: jobErr } = await supabase
-      .from("pekerjaan_bisa")
-      .select("id, status, payment_status, payment_method, pelanggan_id, agreed_price, budget, judul")
-      .eq("id", numJobId)
-      .maybeSingle();
-
-    if (jobErr || !job) {
-      throw new Error(jobErr?.message || "Pesanan tidak ditemukan");
-    }
-
-    // Idempotency: kalau dana sudah pernah dikembalikan (refunded/released/cancelled)
-    // ATAU pesanan sudah selesai, JANGAN refund lagi.
-    // Guard hanya andalkan payment_status (bukan status) karena status bisa ditimpa
-    // oleh aksi lain (mis. handleAcceptOrder) sehingga check status saja tidak cukup.
-    const alreadyFinal =
-      job.payment_status === "refunded" ||
-      job.payment_status === "released" ||
-      job.payment_status === "cod_completed" ||
-      job.payment_status === "cod_cancelled" ||
-      job.payment_status === "cancelled" ||
-      job.status === "selesai";
-    if (alreadyFinal) {
-      // Dana sudah pernah diproses (refund cair / escrow released / sudah selesai).
-      // JANGAN gerakkan saldo lagi. Tapi kalau status masih non-final (mis. job lama
-      // yang kembali di-"Perpanjang" jadi mencari_mitra), paksa jadi dibatalkan
-      // supaya tidak muncul lagi sebagai pesanan aktif.
-      const statusStillActive = !["dibatalkan", "selesai", "ditolak", "expired"].includes(String(job.status));
-      if (statusStillActive) {
-        const { error: forceErr } = await supabase
-          .from("pekerjaan_bisa")
-          .update({ status: "dibatalkan", cancel_requested_at: null, cancel_reason: null, alasan_penolakan: null })
-          .eq("id", numJobId);
-        if (forceErr) throw new Error(`Gagal menutup pesanan: ${forceErr.message}`);
-      }
-      return {
-        success: true,
-        refunded: job.payment_status === "refunded",
-        amount: 0,
-        message: "Pesanan ini sudah pernah diproses (dana sudah dikembalikan / escrow sudah dicairkan).",
-      };
-    }
-
-    const isCOD = job.payment_method === "COD" || job.payment_status === "cod_pending" || job.payment_status === "cod_completed";
-    const isEscrowPaid = !isCOD && (
-      job.payment_status === "escrow_held" ||
-      job.payment_status === "paid" ||
-      job.payment_status === "settlement" ||
-      job.payment_status === "capture" ||
-      job.status === "sedang_dikerjakan" ||
-      job.status === "menunggu_konfirmasi_selesai"
-    );
-
-    // 1. Jika COD: tidak ada escrow yang ditahan, batalkan tanpa kredit saldo
-    if (isCOD) {
-      const { error: codErr } = await supabase
-        .from("pekerjaan_bisa")
-        .update({ status: "dibatalkan", payment_status: "cod_cancelled" })
-        .eq("id", numJobId);
-      if (codErr) throw new Error(`Gagal batalkan pesanan COD: ${codErr.message}`);
-
-      return {
-        success: true,
-        refunded: false,
-        amount: 0,
-        message: "Pesanan COD dibatalkan (tidak ada dana escrow yang ditahan).",
-      };
-    }
-
-    // 2. Jika dana sudah dibayar & ditahan di Escrow: kembalikan ke saldo pelanggan
-    if (isEscrowPaid) {
-      const refundAmount = Number(job.agreed_price) || Number(String(job.budget || "").replace(/\D/g, "")) || 0;
-
-      // ATOMIC CLAIM: tandai pesanan sebagai diproses LEBIH DULU dengan guard payment_status
-      // di klausa WHERE. Kalau tidak ada baris yang berubah, artinya sudah pernah diproses
-      // oleh pemanggilan lain (race / klik ganda) -> JANGAN kredit saldo lagi.
-      // Ini menutup race condition karena guard & tulis jadi satu operasi atomik di DB.
-      const { data: claimed, error: claimErr } = await supabase
-        .from("pekerjaan_bisa")
-        .update({ status: "dibatalkan", payment_status: "refunded" })
-        .eq("id", numJobId)
-        .in("payment_status", ["escrow_held", "paid", "settlement", "capture", "authorized"])
-        .select("id");
-      if (claimErr) throw new Error(`Gagal claim pembatalan: ${claimErr.message}`);
-
-      if (!claimed || claimed.length === 0) {
-        return {
-          success: true,
-          refunded: false,
-          amount: 0,
-          message: "Pesanan sudah diproses sebelumnya (refund tidak diulang).",
-        };
-      }
-
-      if (refundAmount > 0 && job.pelanggan_id) {
-        // Ambil data saldo pelanggan saat ini
-        const { data: clientUser, error: cuErr } = await supabase
-          .from("users_bisa")
-          .select("id, saldo, balance")
-          .eq("id", job.pelanggan_id)
-          .maybeSingle();
-        if (cuErr) throw new Error(`Gagal baca saldo Klien: ${cuErr.message}`);
-
-        if (clientUser) {
-          const curSaldo = Number(clientUser.saldo ?? clientUser.balance ?? 0);
-          const newSaldo = curSaldo + refundAmount;
-
-          const { error: saldoErr } = await supabase
-            .from("users_bisa")
-            .update({ saldo: newSaldo, balance: newSaldo })
-            .eq("id", job.pelanggan_id);
-          if (saldoErr) throw new Error(`Gagal kembalikan saldo Klien: ${saldoErr.message}`);
-
-          // Catat ke ledger transactions (kategori: refund)
-          try {
-            await supabase.from("transactions").insert({
-              user_id: job.pelanggan_id,
-              type: "in",
-              category: "refund",
-              reference_id: numJobId,
-              amount: refundAmount,
-              title: `Refund: ${job.judul || `Pesanan #${job.id}`}`,
-              description: `Pengembalian dana pembatalan pesanan #${job.id}${reason ? ` (${reason})` : ""}`,
-              icon: "receipt",
-              status: "Berhasil",
-            });
-          } catch (tErr) {
-            console.warn("[Refund] Gagal mencatat ledger transactions:", tErr);
-          }
-        }
-      }
-
-      return {
-        success: true,
-        refunded: true,
-        amount: refundAmount,
-        message: `Pesanan dibatalkan. Dana sebesar Rp ${refundAmount.toLocaleString("id-ID")} telah dikembalikan ke saldo Dompet Anda dan dapat ditarik.`,
-      };
-    }
-
-    // 3. Jika belum bayar (belum ada dana yang masuk)
-    const { error: unpaidErr } = await supabase
-      .from("pekerjaan_bisa")
-      .update({ status: "dibatalkan", payment_status: "cancelled" })
-      .eq("id", numJobId);
-    if (unpaidErr) throw new Error(`Gagal batalkan pesanan: ${unpaidErr.message}`);
+    // Server-side: backend yang validasi & update saldo (service role key).
+    // Client TIDAK lagi menyentuh users_bisa / transactions langsung.
+    const { getSupabaseToken } = await import("./auth");
+    const token = await getSupabaseToken();
+    const res = await fetch(`${API_URL}/api/order/action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jobId: numJobId, action: "refund", reason }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || "Gagal memproses refund");
+    if (data.success === false) throw new Error(data.error || data.message || "Gagal memproses refund");
 
     return {
       success: true,
-      refunded: false,
-      amount: 0,
-      message: "Pesanan dibatalkan.",
+      refunded: Boolean(data.refunded),
+      amount: Number(data.amount) || 0,
+      message: data.message || "Pesanan dibatalkan.",
     };
   } catch (err: any) {
     console.error("[processOrderRefund] Error:", err);
@@ -226,7 +100,7 @@ export async function releaseEscrowPayout(
   try {
     const { getSupabaseToken } = await import("./auth");
     const token = await getSupabaseToken();
-    const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/order/action`, {
+    const res = await fetch(`${API_URL}/api/order/action`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -256,56 +130,56 @@ export async function requestOrderCancellation(
     const numJobId = Number(jobId);
     if (!numJobId) throw new Error("ID pesanan tidak valid");
 
-    const { data: job, error: jobErr } = await supabase
-      .from("pekerjaan_bisa")
-      .select("id, status, payment_status, pelanggan_id, mitra_id, judul")
-      .eq("id", numJobId)
-      .maybeSingle();
+    const cleanReason = reason?.trim() || "Klien mengajukan pembatalan pesanan";
 
-  if (jobErr || !job) throw new Error(jobErr?.message || "Pesanan tidak ditemukan");
+    // Server-side: backend update status ke 'menunggu_persetujuan_batal'.
+    const { getSupabaseToken } = await import("./auth");
+    const token = await getSupabaseToken();
+    const res = await fetch(`${API_URL}/api/order/action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jobId: numJobId, action: "request_cancel", reason: cleanReason }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || "Gagal mengajukan pembatalan");
+    if (data.success === false) throw new Error(data.error || data.message || "Gagal mengajukan pembatalan");
 
-  const now = new Date().toISOString();
-  const cleanReason = reason?.trim() || "Klien mengajukan pembatalan pesanan";
-
-  const updatePayload: any = {
-    status: "menunggu_persetujuan_batal",
-    cancel_requested_at: now,
-    cancel_reason: cleanReason,
-    alasan_penolakan: cleanReason, // Fallback jika kolom cancel_reason belum terbaca
-  };
-
-  const { error: updErr } = await supabase
-    .from("pekerjaan_bisa")
-    .update(updatePayload)
-    .eq("id", numJobId);
-
-  if (updErr) throw new Error(updErr.message);
-
-  // Injeksi notifikasi / pesan ke chat
-  try {
-    const { ensureConversationAndNavigate } = await import("./chatInbox");
-    const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), job.id, false);
-    if (convId) {
-      const msg = `⚠️ Klien mengajukan pembatalan pesanan: "${cleanReason}". Mitra memiliki waktu 24 jam untuk merespons.`;
-      await supabase.from("messages").insert({
-        conversation_id: convId,
-        sender_id: Number(job.pelanggan_id),
-        message_type: "system",
-        content: msg,
-      } as any);
-      await supabase.from("conversations").update({
-        last_message: msg,
-        last_message_at: now,
-      } as any).eq("id", convId);
+    // Injeksi notifikasi / pesan ke chat (insert pesan sistem — tidak mengubah dana).
+    try {
+      const { data: job } = await supabase
+        .from("pekerjaan_bisa")
+        .select("id, pelanggan_id")
+        .eq("id", numJobId)
+        .maybeSingle();
+      if (job) {
+        const { ensureConversationAndNavigate } = await import("./chatInbox");
+        const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), job.id, false);
+        if (convId) {
+          const now = new Date().toISOString();
+          const msg = `⚠️ Klien mengajukan pembatalan pesanan: "${cleanReason}". Mitra memiliki waktu 24 jam untuk merespons.`;
+          await supabase.from("messages").insert({
+            conversation_id: convId,
+            sender_id: Number(job.pelanggan_id),
+            message_type: "system",
+            content: msg,
+          } as any);
+          await supabase.from("conversations").update({
+            last_message: msg,
+            last_message_at: now,
+          } as any).eq("id", convId);
+        }
+      }
+    } catch (e) {
+      console.warn("[requestOrderCancellation] chat inject warn:", e);
     }
-  } catch (e) {
-    console.warn("[requestOrderCancellation] chat inject warn:", e);
-  }
 
-  return {
-    success: true,
-    message: "Pengajuan pembatalan telah dikirim ke Mitra. Menunggu respon dalam 24 jam.",
-  };
+    return {
+      success: true,
+      message: data.message || "Pengajuan pembatalan telah dikirim ke Mitra. Menunggu respon dalam 24 jam.",
+    };
   } catch (err: any) {
     console.error("[requestOrderCancellation] Error:", err);
     throw err;
@@ -324,61 +198,42 @@ export async function respondOrderCancellation(
     const numJobId = Number(jobId);
     if (!numJobId) throw new Error("ID pesanan tidak valid");
 
-    const { data: job, error: jobErr } = await supabase
-      .from("pekerjaan_bisa")
-      .select("id, status, payment_status, pelanggan_id, mitra_id, cancel_reason, alasan_penolakan, judul")
-      .eq("id", numJobId)
-      .maybeSingle();
+    // Server-side: backend urus refund (approved) atau tolak (reject).
+    const { getSupabaseToken } = await import("./auth");
+    const token = await getSupabaseToken();
+    const res = await fetch(`${API_URL}/api/order/action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        jobId: numJobId,
+        action: "respond_cancel",
+        approved,
+        reason: rejectReason,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.message || "Gagal menanggapi pembatalan");
+    if (data.success === false) throw new Error(data.error || data.message || "Gagal menanggapi pembatalan");
 
-    if (jobErr || !job) throw new Error(jobErr?.message || "Pesanan tidak ditemukan");
-
-    const now = new Date().toISOString();
-
-    if (approved) {
-      // Mitra setuju batal -> dana dikembalikan (refund) ke Saldo Klien
-      const reasonText = (job as any).cancel_reason || (job as any).alasan_penolakan || "Disetujui oleh Mitra";
-      const refRes = await processOrderRefund(numJobId, `Persetujuan Batal Mitra: ${reasonText}`);
-
-      try {
-        const { ensureConversationAndNavigate } = await import("./chatInbox");
-        const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), job.id, true);
-        if (convId) {
-          const msg = `✅ Mitra telah menyetujui pembatalan pesanan. Dana telah dikembalikan ke Saldo Dompet Klien.`;
-          await supabase.from("messages").insert({
-            conversation_id: convId,
-            sender_id: Number(job.mitra_id),
-            message_type: "system",
-            content: msg,
-          } as any);
-          await supabase.from("conversations").update({
-            last_message: msg,
-            last_message_at: now,
-          } as any).eq("id", convId);
-        }
-      } catch {}
-
-      return {
-        success: true,
-        refunded: refRes.refunded,
-        message: refRes.message,
-      };
-    } else {
-      // Mitra menolak pembatalan (misal pekerjaan sudah > 80% atau ada perselisihan)
-      const cleanRejectReason = rejectReason?.trim() || "Pekerjaan sedang berlangsung / progres > 80%";
-      const { error: rejErr } = await supabase
+    // Injeksi pesan sistem ke chat (tidak mengubah dana).
+    try {
+      const { data: job } = await supabase
         .from("pekerjaan_bisa")
-        .update({
-          status: "sedang_dikerjakan",
-          alasan_penolakan: `Pembatalan ditolak: ${cleanRejectReason}`,
-        })
-        .eq("id", numJobId);
-      if (rejErr) throw new Error(`Gagal menolak pembatalan: ${rejErr.message}`);
-
-      try {
+        .select("id, pelanggan_id, mitra_id")
+        .eq("id", numJobId)
+        .maybeSingle();
+      if (job) {
         const { ensureConversationAndNavigate } = await import("./chatInbox");
         const convId = await ensureConversationAndNavigate(String(job.pelanggan_id), job.id, true);
         if (convId) {
-          const msg = `❌ Mitra menolak pengajuan pembatalan dengan alasan: "${cleanRejectReason}". Pekerjaan tetap dilanjutkan. Jika ada kendala, silakan hubungi Pusat Bantuan / Komplain.`;
+          const now = new Date().toISOString();
+          const cleanRejectReason = rejectReason?.trim() || "Pekerjaan sedang berlangsung / progres > 80%";
+          const msg = approved
+            ? `✅ Mitra telah menyetujui pembatalan pesanan. Dana telah dikembalikan ke Saldo Dompet Klien.`
+            : `❌ Mitra menolak pengajuan pembatalan dengan alasan: "${cleanRejectReason}". Pekerjaan tetap dilanjutkan. Jika ada kendala, silakan hubungi Pusat Bantuan / Komplain.`;
           await supabase.from("messages").insert({
             conversation_id: convId,
             sender_id: Number(job.mitra_id),
@@ -390,14 +245,14 @@ export async function respondOrderCancellation(
             last_message_at: now,
           } as any).eq("id", convId);
         }
-      } catch {}
+      }
+    } catch {}
 
-      return {
-        success: true,
-        refunded: false,
-        message: "Pengajuan pembatalan ditolak. Pekerjaan dilanjutkan.",
-      };
-    }
+    return {
+      success: true,
+      refunded: Boolean(data.refunded),
+      message: data.message || (approved ? "Pengajuan pembatalan disetujui." : "Pengajuan pembatalan ditolak. Pekerjaan dilanjutkan."),
+    };
   } catch (err: any) {
     console.error("[respondOrderCancellation] Error:", err);
     throw err;
@@ -423,7 +278,7 @@ export async function submitOrderDispute(
 
     const { getSupabaseToken } = await import("./auth");
     const token = await getSupabaseToken();
-    const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/order/action`, {
+    const res = await fetch(`${API_URL}/api/order/action`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

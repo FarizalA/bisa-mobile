@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
@@ -130,7 +130,7 @@ export function useHomeLogic() {
     const isCacheValid = _cachedProviders && Date.now() - _cachedAt < CACHE_TTL;
     // Kalau ada cache valid & bukan silent, tampilkan cache dulu tanpa loading spinner
     if (isCacheValid && !opts?.silent) {
-      setProviders(_cachedProviders!);
+      setProviders(user?.id ? _cachedProviders!.filter((p) => String(p.id) !== String(user.id)) : _cachedProviders!);
       setLoading(false);
       // Tetap fetch silent di background untuk update diam-diam
       // fetchProviders({ silent: true }); // Removed to avoid circular dependency / access before declaration
@@ -144,7 +144,7 @@ export function useHomeLogic() {
             min_rating: minRating, filter_trusted: onlyTrusted, sort_by: sortBy,
             exclude_client_id: user?.id || 0,
           });
-          if (rpcData) setProviders(rpcData.map((p: any) => ({ ...p, id: p.id })));
+          if (rpcData) setProviders(rpcData.filter((p: any) => String(p.id) !== String(user?.id)).map((p: any) => ({ ...p, id: p.id })));
         } catch {}
       })();
       return;
@@ -177,7 +177,9 @@ export function useHomeLogic() {
       });
 
       if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-        const enriched: ProviderItem[] = rpcData.map((p: any) => ({
+        // Tambah filter client-side untuk memastikan diri sendiri tidak masuk (RPC bisa bug)
+        const filteredRpc = user?.id ? rpcData.filter((p: any) => String(p.id) !== String(user.id)) : rpcData;
+        const enriched: ProviderItem[] = filteredRpc.map((p: any) => ({
           id: p.id,
           name: p.name || "Mitra BISA",
           skill: p.keahlian || p.keahlian_detail || "Jasa Umum",
@@ -268,6 +270,19 @@ export function useHomeLogic() {
   useEffect(() => {
     fetchProviders();
   }, [fetchProviders]);
+
+  // Saat user.id berubah (dari null ke terisi), buang cache lama agar
+  // tidak menampilkan profil sendiri dari fetch sebelum user ter-load.
+  const prevUserIdRef = useRef<any>(null);
+  useEffect(() => {
+    if (user?.id && prevUserIdRef.current !== user.id) {
+      if (prevUserIdRef.current === null) {
+        _cachedProviders = null;
+        _cachedAt = 0;
+      }
+      prevUserIdRef.current = user.id;
+    }
+  }, [user?.id]);
 
   const onRefresh = () => {
     _cachedProviders = null;
