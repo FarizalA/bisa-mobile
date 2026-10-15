@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Image, ScrollView, Modal, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useRootNavigationState } from "expo-router";
 import { ArrowLeft, CheckCircle, Clock, ShieldCheck, Zap, XCircle } from "lucide-react-native";
 import { safeBack } from "../src/lib/navigation";
 import { supabase } from "../src/lib/supabase";
@@ -9,6 +9,7 @@ import { getStoredUser, setStoredUser } from "../src/lib/user-storage";
 
 export default function WaitingPage() {
   const router = useRouter();
+  const rootNavState = useRootNavigationState();
   const [status, setStatus] = useState("Menunggu");
   const [faceUrl, setFaceUrl] = useState<string | null>(null);
   const [kycMessage, setKycMessage] = useState<string | null>(null);
@@ -63,6 +64,16 @@ export default function WaitingPage() {
 
   const isVerified = status === "Terverifikasi" || status === "approved";
   const isRejected = status === "Ditolak";
+
+  // Guard: root navigation context belum siap (mis. cold start / redirect awal).
+  // Tanpa ini, Android kadang me-render screen ini sebelum <Stack> mount → useRouter() crash.
+  if (!rootNavState?.key) {
+    return (
+      <SafeAreaView className="flex-1 bg-[#f9fafb] items-center justify-center">
+        <ActivityIndicator size="large" color="#ff6b00" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-[#f9fafb]">
