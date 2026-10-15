@@ -91,6 +91,8 @@ renderProviders(providers);
 // Popup klik -> buka profil (pakai listener, bukan onclick inline).
 document.addEventListener('click',function(e){
   var t=e.target;
+  if(!t) return;
+  while(t && t.getAttribute && !t.getAttribute('data-prof')){ t=t.parentElement; }
   if(t && t.getAttribute && t.getAttribute('data-prof')){ openProfile(t.getAttribute('data-prof')); }
 },true);
 
