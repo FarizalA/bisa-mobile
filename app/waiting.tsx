@@ -157,8 +157,8 @@ export default function WaitingPage() {
               <Image
                 source={
                   isVerified
-                    ? require("../assets/maskot_happy.jpg")
-                    : require("../assets/maskot_sad.jpg")
+                    ? require("../assets/maskot_happy.png")
+                    : require("../assets/maskot_sad.png")
                 }
                 style={{ width: "100%", height: "100%" }}
                 resizeMode="contain"

@@ -7,7 +7,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { supabase } from "../../src/lib/supabase";
 import { setStoredUser } from "../../src/lib/user-storage";
-import { compressImageDetailed } from "../../src/lib/imageCompression";
+import { compressImageDetailed, compressImageWithBase64, base64ToUint8Array } from "../../src/lib/imageCompression";
 import DaftarHeader from "../../src/components/daftar/DaftarHeader";
 import DaftarProgressCard from "../../src/components/daftar/DaftarProgressCard";
 import DaftarBiodataSection from "../../src/components/daftar/DaftarBiodataSection";
@@ -206,13 +206,22 @@ export default function DaftarPage() {
       }
 
       const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Upload biner lewat base64 — jauh lebih andal daripada fetch(uri).blob() di RN.
+      // fetch().blob() di RN menghasilkan body cacat (Content-Type jadi text/plain),
+      // sehingga gambar tidak bisa dirender di web admin.
+      let payload: any;
+      try {
+        const comp = await compressImageWithBase64(uri, 1280, 0.7);
+        payload = comp.base64 ? base64ToUint8Array(comp.base64) : (await (await fetch(uri)).blob());
+      } catch {
+        payload = await (await fetch(uri)).blob();
+      }
+      const contentType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("berkas_kyc")
-        .upload(fileName, blob, {
-          contentType: blob.type || (ext === "png" ? "image/png" : "image/jpeg"),
+        .upload(fileName, payload, {
+          contentType,
           upsert: true,
         });
 
