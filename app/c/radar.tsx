@@ -92,6 +92,7 @@ export default function RadarPage() {
   const [filterRating, setFilterRating] = useState<number>(0);
   const [onlyTrusted, setOnlyTrusted] = useState<boolean>(false);
   const [activeDropdown, setActiveDropdown] = useState<"kategori" | "radius" | "harga" | "rating" | null>(null);
+  const [sheetMitra, setSheetMitra] = useState<any | null>(null);
 
   // Reset ready flag tiap kali peta di-mount ulang (tab fokus kembali).
   useEffect(() => {
@@ -149,6 +150,12 @@ export default function RadarPage() {
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         if (data && data.type === "OPEN_PROFILE" && data.id) {
           router.push(`/profil/${data.id}` as any);
+        }
+        if (data && data.type === "OPEN_PROFILE_SHEET" && data.id) {
+          setSheetMitra(data);
+        }
+        if (data && data.type === "MAP_MOVED") {
+          setSheetMitra(null);
         }
       } catch (e) {}
     };
@@ -365,6 +372,12 @@ export default function RadarPage() {
         if (data.type === "OPEN_PROFILE" && data.id) {
           router.push(`/profil/${data.id}` as any);
         }
+        if (data.type === "OPEN_PROFILE_SHEET" && data.id) {
+          setSheetMitra(data);
+        }
+        if (data.type === "MAP_MOVED") {
+          setSheetMitra(null);
+        }
       } catch {}
     },
     [router, flushQueues, pushToMap, location, radius, providers]
@@ -511,6 +524,46 @@ export default function RadarPage() {
             <Crosshair size={20} color="#2563eb" /><Text className="text-xs font-bold text-gray-800">Lokasi Saya</Text>
           </TouchableOpacity>
         </View>
+        {/* Bottom Sheet profil mitra (dari spiderfy pin bertumpuk) */}
+        {sheetMitra ? (
+          <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 60, elevation: 15 }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => setSheetMitra(null)} className="flex-1" style={{ height: 60 }} />
+            <View className="bg-white rounded-t-3xl border-t border-gray-100 shadow-[0_-6px_24px_rgba(0,0,0,0.15)] px-4 pt-3 pb-5">
+              <View className="w-10 h-1 rounded-full bg-gray-300 self-center mb-3" />
+              <View className="flex-row items-center gap-3">
+                <Image
+                  source={sheetMitra.face_url ? { uri: sheetMitra.face_url } : require("../../assets/mascot.png")}
+                  style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "#f1f5f9" }}
+                  resizeMode="cover"
+                />
+                <View className="flex-1 min-w-0">
+                  <Text className="text-[15px] font-extrabold text-gray-900" numberOfLines={1}>{sheetMitra.name || "Mitra"}</Text>
+                  <Text className="text-[12px] text-gray-500 font-medium" numberOfLines={1}>{sheetMitra.keahlian || sheetMitra.kategori || "Penyedia Jasa"}</Text>
+                  <View className="flex-row items-center gap-2 mt-0.5">
+                    <View className="flex-row items-center gap-1"><Star size={11} color="#f59e0b" fill="#f59e0b" /><Text className="text-[11px] font-bold text-amber-800">{sheetMitra.rating ? Number(sheetMitra.rating).toFixed(1) : "Baru"}</Text></View>
+                    {sheetMitra.distance_km != null && sheetMitra.distance_km < 999999 ? <Text className="text-[11px] font-bold text-orange-600">• {Number(sheetMitra.distance_km).toFixed(1)} km</Text> : null}
+                    {sheetMitra.base_price ? <Text className="text-[11px] font-bold text-gray-700">• Rp{Number(sheetMitra.base_price).toLocaleString("id-ID")}</Text> : null}
+                  </View>
+                </View>
+              </View>
+              <View className="flex-row items-center gap-2 mt-4">
+                <TouchableOpacity
+                  onPress={() => { setSheetMitra(null); router.push(`/profil/${sheetMitra.id}` as any); }}
+                  className="flex-1 h-10 rounded-xl bg-[#ff6b00] items-center justify-center flex-row gap-1.5"
+                >
+                  <Text className="text-white font-bold text-xs">Lihat Profil</Text>
+                  <ChevronRight size={15} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSheetMitra(null)}
+                  className="h-10 px-4 rounded-xl border border-gray-300 items-center justify-center"
+                >
+                  <Text className="text-gray-700 font-bold text-xs">Tutup</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <RadarFilterModals

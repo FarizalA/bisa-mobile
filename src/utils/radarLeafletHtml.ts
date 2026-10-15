@@ -20,11 +20,12 @@ function zoomForKm(r){ return r>=100?10:r>=25?11:r>=10?12:r>=5?13:r>=3?14:15; }
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([userLat,userLng],zoomForKm(radiusKm));
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19}).addTo(map);
 
-function openProfile(id){
-  var payload=JSON.stringify({type:'OPEN_PROFILE',id:id});
-  if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(payload); }
-  try { window.parent.postMessage(payload,'*'); } catch(e){}
+function sendToRN(payload){
+  var str = (typeof payload==='string') ? payload : JSON.stringify(payload);
+  if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){ window.ReactNativeWebView.postMessage(str); }
+  try { window.parent.postMessage(str,'*'); } catch(e){}
 }
+function openProfile(id){ sendToRN({type:'OPEN_PROFILE',id:id}); }
 
 var userIcon=L.divIcon({html:'<div style="background:#2563eb;width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.35)"><\/div>',className:'',iconSize:[18,18],iconAnchor:[9,9]});
 var userMarker=L.marker([userLat,userLng],{icon:userIcon,zIndexOffset:9999}).addTo(map).bindPopup('<div style="font-weight:bold;font-size:12px;text-align:center;padding:4px">Lokasi Anda<\/div>');
@@ -125,6 +126,120 @@ var debouncedRecompute=debounce(recomputeCollisions,DEBOUNCE_MS);
 map.on('moveend',debouncedRecompute);
 map.on('zoomend',debouncedRecompute);
 
+// ===== Tahap B: spiderfy (mekar orbit) + garis penghubung =====
+// Pin asli tetap di koordinat geo; saat mekar, pin dipindah visual lewat
+// transform:translate() pada .pin-host, dan garis digambar di <canvas> overlay.
+var ORBIT_RADIUS=72, ORBIT_2PIN_GAP=64;
+var expandedLeaderId=null;       // provider.id leader yang sedang mekar
+var expandedFollowers=[];        // entry follower yang sedang ditarik keluar
+
+// Canvas overlay untuk garis penghubung (murni visual layar, ikut ukuran peta).
+var connectorCanvas=document.createElement('canvas');
+connectorCanvas.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:500';
+var mapContainer=map.getContainer();
+mapContainer.style.position='relative';
+mapContainer.appendChild(connectorCanvas);
+function sizeCanvas(){
+  var r=mapContainer.getBoundingClientRect();
+  connectorCanvas.width=r.width; connectorCanvas.height=r.height;
+}
+function clearConnectors(){
+  var ctx=connectorCanvas.getContext('2d');
+  if(ctx) ctx.clearRect(0,0,connectorCanvas.width,connectorCanvas.height);
+}
+function drawConnectors(centerPt,orbits){
+  sizeCanvas();
+  var ctx=connectorCanvas.getContext('2d'); if(!ctx) return;
+  ctx.clearRect(0,0,connectorCanvas.width,connectorCanvas.height);
+  ctx.strokeStyle='#94A3B8'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]);
+  ctx.globalAlpha=0; // fade-in disinkronkan via requestAnimationFrame
+  var start=Date.now(), DUR=260;
+  function frame(){
+    var t=Math.min(1,(Date.now()-start)/DUR);
+    ctx.clearRect(0,0,connectorCanvas.width,connectorCanvas.height);
+    ctx.globalAlpha=t;
+    ctx.beginPath();
+    for(var i=0;i<orbits.length;i++){
+      ctx.moveTo(centerPt.x,centerPt.y);
+      ctx.lineTo(orbits[i].x,orbits[i].y);
+    }
+    ctx.stroke();
+    if(t<1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function orbitPositions(centerPt,count){
+  var pts=[];
+  if(count===1){ pts.push({x:centerPt.x,y:centerPt.y-ORBIT_2PIN_GAP}); return pts; }
+  if(count===2){
+    pts.push({x:centerPt.x-ORBIT_2PIN_GAP/2,y:centerPt.y-ORBIT_2PIN_GAP/2});
+    pts.push({x:centerPt.x+ORBIT_2PIN_GAP/2,y:centerPt.y+ORBIT_2PIN_GAP/2});
+    return pts;
+  }
+  for(var i=0;i<count;i++){
+    var theta=(2*Math.PI*i)/count - Math.PI/2;
+    pts.push({x:centerPt.x+ORBIT_RADIUS*Math.cos(theta), y:centerPt.y+ORBIT_RADIUS*Math.sin(theta)});
+  }
+  return pts;
+}
+
+function resetHostTransform(entry){
+  var el=entry.marker.getElement(); if(!el) return;
+  var host=el.querySelector('.pin-host'); if(!host) return;
+  if(HEAVY){ host.style.transition='none'; }
+  else { host.style.transition='transform 170ms ease-in'; }
+  host.style.transform='translate(0,0)';
+}
+
+function collapseSpiderfy(){
+  if(!expandedLeaderId && expandedFollowers.length===0){ clearConnectors(); return; }
+  var leaderEntry=null;
+  for(var i=0;i<pinEntries.length;i++){ if(pinEntries[i].provider.id===expandedLeaderId){ leaderEntry=pinEntries[i]; break; } }
+  if(leaderEntry) resetHostTransform(leaderEntry);
+  for(var f=0;f<expandedFollowers.length;f++){ resetHostTransform(expandedFollowers[f]); }
+  expandedLeaderId=null; expandedFollowers=[];
+  clearConnectors();
+  // Kembalikan badge leader + semprot ulang state collapsed.
+  recomputeCollisions();
+}
+
+function expandSpiderfy(leaderEntry){
+  var group=[leaderEntry].concat(leaderEntry.followers);
+  if(group.length<2) return;
+  expandedLeaderId=leaderEntry.provider.id;
+  expandedFollowers=leaderEntry.followers.slice();
+
+  var centerPt=map.latLngToContainerPoint(leaderEntry.latlng);
+  var pts=orbitPositions(centerPt,group.length);
+
+  // Sembunyikan badge leader, tampilkan semua pin (leader + follower).
+  var leaderEl=leaderEntry.marker.getElement();
+  if(leaderEl){
+    leaderEl.classList.remove('is-clustered-hidden');
+    var lh=leaderEl.querySelector('.pin-host'); if(lh) lh.classList.remove('is-stacked');
+  }
+  for(var i=0;i<group.length;i++){
+    var entry=group[i];
+    var el=entry.marker.getElement(); if(!el) continue;
+    el.classList.remove('is-clustered-hidden');
+    var host=el.querySelector('.pin-host'); if(!host) continue;
+    // Leader tetap di titik asli; follower ditarik ke orbit.
+    var fromPt=map.latLngToContainerPoint(entry.latlng);
+    var toPt=pts[i];
+    var dx=toPt.x-fromPt.x, dy=toPt.y-fromPt.y;
+    if(HEAVY){ host.style.transition='none'; }
+    else { host.style.transition='transform 270ms cubic-bezier(0.34,1.56,0.64,1)'; }
+    host.style.transform='translate('+dx+'px,'+dy+'px)';
+    entry.marker.setZIndexOffset(2000+i);
+  }
+  drawConnectors(centerPt,pts);
+}
+
+map.on('click',function(){ collapseSpiderfy(); });
+map.on('movestart',function(){ collapseSpiderfy(); sendToRN({type:'MAP_MOVED'}); });
+map.on('zoomstart',function(){ collapseSpiderfy(); });
+
 // Batas marker supaya HP RAM 4GB tak crash di radius besar.
 var MAX_MARKERS=60;
 // Kalau marker banyak, matikan animasi CSS (ratusan animasi = repaint terus-menerus).
@@ -194,7 +309,50 @@ function renderProviders(list){
 
 renderProviders(providers);
 
-// Popup klik -> buka profil (pakai listener, bukan onclick inline).
+// Klik pin: pin bertumpuk -> mekar (spiderfy); pin mekar -> kirim ke RN (bottom sheet); pin tunggal -> popup bawaan.
+mapContainer.addEventListener('click',function(e){
+  var t=e.target;
+  if(!t) return;
+  var hostEl=null, node=t;
+  while(node && node!==mapContainer){ if(node.classList && node.classList.contains('pin-host')){ hostEl=node; break; } node=node.parentElement; }
+  if(!hostEl) return;
+  var iconEl=hostEl.closest('.leaflet-marker-icon');
+
+  // Cari entry berdasar elemen marker
+  var entry=null;
+  for(var i=0;i<pinEntries.length;i++){
+    if(pinEntries[i].marker.getElement()===iconEl){ entry=pinEntries[i]; break; }
+  }
+  if(!entry) return;
+
+  // Sudah mekar -> kirim buka bottom sheet untuk pin yang diketuk.
+  if(expandedLeaderId!==null){
+    e.stopPropagation(); e.preventDefault();
+    sendOpenSheet(entry.provider);
+    return;
+  }
+  // Bertumpuk (leader punya follower) -> mekar.
+  if(entry.followers && entry.followers.length>0){
+    e.stopPropagation(); e.preventDefault();
+    expandSpiderfy(entry);
+    return;
+  }
+  // Pin tunggal -> biarkan popup bawaan Leaflet terbuka.
+},true);
+
+// Kirim data provider ke React Native untuk menampilkan Bottom Sheet profil.
+function sendOpenSheet(p){
+  sendToRN({
+    type:'OPEN_PROFILE_SHEET',
+    id:p.id, name:p.name, face_url:p.face_url||null,
+    keahlian:p.keahlian||null, kategori:p.kategori||null,
+    rating:(typeof p.rating==='number')?p.rating:null,
+    base_price:(typeof p.base_price==='number')?p.base_price:null,
+    distance_km:pinDistanceKm(p)
+  });
+}
+
+// Klik isi popup (kartu "Lihat Profil") -> buka profil penuh (native) / kirim ke RN (web).
 document.addEventListener('click',function(e){
   var t=e.target;
   if(!t) return;
