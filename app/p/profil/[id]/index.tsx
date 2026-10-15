@@ -255,15 +255,19 @@ export default function MitraPublicProfilePage() {
                 </TouchableOpacity>
               )}
               <View className="flex-row flex-wrap gap-2 mt-1">
-                {(keahlianList.length > 0 ? keahlianList : ["Servis AC & Elektronik"]).map((svc: string, idx: number) => (
-                  <View
-                    key={idx}
-                    className="bg-[#FFF7ED] border border-[#FFEDD5] rounded-xl"
-                    style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-                  >
-                    <Text className="text-[12px] font-bold text-[#A04100]">{svc}</Text>
-                  </View>
-                ))}
+                {keahlianList.length > 0 ? (
+                  keahlianList.map((svc: string, idx: number) => (
+                    <View
+                      key={idx}
+                      className="bg-[#FFF7ED] border border-[#FFEDD5] rounded-xl"
+                      style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                    >
+                      <Text className="text-[12px] font-bold text-[#A04100]">{svc}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text className="text-[12px] text-gray-400 font-medium">Belum memilih layanan.</Text>
+                )}
               </View>
             </View>
           </View>
