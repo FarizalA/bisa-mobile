@@ -214,7 +214,9 @@ export function useHomeLogic() {
         .select(
           "id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, kategori, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until"
         )
-        .or("kyc_status.eq.Terverifikasi,kyc_status.eq.approved");
+        .or("kyc_status.eq.Terverifikasi,kyc_status.eq.approved")
+        .not("kategori", "is", null)
+        .neq("kategori", "");
 
       if (user?.id) {
         query = query.neq("id", user.id);

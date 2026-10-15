@@ -194,7 +194,7 @@ export default function RadarPage() {
             });
           setProviders(enriched);
         } else {
-          let q = supabase.from("users_bisa").select("id, name, face_url, latitude, longitude, rating, total_orders, keahlian, base_price, is_trusted, subscription_plan").eq("kyc_status", "Terverifikasi").not("latitude", "is", null).not("longitude", "is", null);
+          let q = supabase.from("users_bisa").select("id, name, face_url, latitude, longitude, rating, total_orders, keahlian, base_price, is_trusted, subscription_plan").eq("kyc_status", "Terverifikasi").not("kategori", "is", null).neq("kategori", "").not("latitude", "is", null).not("longitude", "is", null);
           if (user?.id) q = q.neq("id", user.id);
           if (filterKategori !== "Semua Jasa") {
             // Cocokkan kategori lewat daftar kata kunci (keahlian teks-bebas).

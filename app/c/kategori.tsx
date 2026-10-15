@@ -55,7 +55,9 @@ export default function KategoriPage() {
         .from("users_bisa")
         .select("id, name, phone, email, address, alamat_singkat, face_url, latitude, longitude, kyc_status, rating, total_orders, is_available, status, kategori, keahlian, keahlian_detail, base_price, is_trusted, role, is_featured, subscription_plan, subscription_until")
         .eq("kyc_status", "Terverifikasi")
-        .neq("kyc_status", "Dibekukan");
+        .neq("kyc_status", "Dibekukan")
+        .not("kategori", "is", null)
+        .neq("kategori", "");
 
       if (storedUser?.id) {
         query = query.neq("id", storedUser.id);
