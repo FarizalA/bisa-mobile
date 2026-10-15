@@ -200,7 +200,7 @@ export default function DaftarPage() {
       const contentType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("berkas_kyc")
+        .from("kyc_dokumen")
         .upload(fileName, payload, {
           contentType,
           upsert: true,
@@ -218,8 +218,10 @@ export default function DaftarPage() {
         }
         return { url: null, error: uploadError.message };
       }
-      const publicUrl = supabase.storage.from("berkas_kyc").getPublicUrl(fileName).data.publicUrl;
-      return { url: publicUrl, error: null };
+      // Dokumen KYC disimpan di bucket private. Yang disimpan ke DB adalah path
+      // objeknya (bukan URL publik), karena URL publik bucket private tidak bisa
+      // dibuka. Admin membuat signed URL dari server saat menampilkan dokumen.
+      return { url: fileName, error: null };
     } catch (err: any) {
       console.error("uploadFile catch error:", err);
       return { url: null, error: err?.message || "Gagal memproses file gambar." };
