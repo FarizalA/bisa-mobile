@@ -91,20 +91,22 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
-  if (!ready) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#faf8ff" }}>
-        <ActivityIndicator size="large" color="#ff6b00" />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" translucent={false} />
       <SupabaseProvider>
         <PopupProvider>
           <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+          {/* Overlay saat font/bundle belum siap. Stack HARUS selalu di-mount agar
+              navigation context tersedia — kalau tidak, screen bisa crash
+              "Couldn't find a navigation context" saat redirect awal. */}
+          {!ready && (
+            <View
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "#faf8ff" }}
+            >
+              <ActivityIndicator size="large" color="#ff6b00" />
+            </View>
+          )}
         </PopupProvider>
       </SupabaseProvider>
     </SafeAreaProvider>
