@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Image, ScrollView, Modal, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useRootNavigationState } from "expo-router";
+import { router, useRootNavigationState } from "expo-router";
 import { ArrowLeft, CheckCircle, Clock, ShieldCheck, Zap, XCircle } from "lucide-react-native";
 import { safeBack } from "../src/lib/navigation";
 import { supabase } from "../src/lib/supabase";
 import { getStoredUser, setStoredUser } from "../src/lib/user-storage";
 
 export default function WaitingPage() {
-  const router = useRouter();
   const rootNavState = useRootNavigationState();
   const [status, setStatus] = useState("Menunggu");
   const [faceUrl, setFaceUrl] = useState<string | null>(null);
@@ -16,6 +15,8 @@ export default function WaitingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Tunggu root navigation siap sebelum menyentuh router (hindari crash cold start di Android).
+    if (!rootNavState?.key) return;
     let timer: any;
     const checkUserStatus = async () => {
       try {
@@ -60,7 +61,7 @@ export default function WaitingPage() {
     checkUserStatus();
     timer = setInterval(checkUserStatus, 3000);
     return () => clearInterval(timer);
-  }, []);
+  }, [rootNavState?.key]);
 
   const isVerified = status === "Terverifikasi" || status === "approved";
   const isRejected = status === "Ditolak";
