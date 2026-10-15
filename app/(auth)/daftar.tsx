@@ -203,7 +203,10 @@ export default function DaftarPage() {
         .from("kyc_dokumen")
         .upload(fileName, payload, {
           contentType,
-          upsert: true,
+          // Nama file selalu unik (timestamp + acak), jadi tidak perlu upsert.
+          // upsert memicu operasi UPDATE yang tidak diizinkan policy RLS
+          // (anon hanya boleh INSERT ke bucket KYC) sehingga unggahan gagal.
+          upsert: false,
         });
 
       if (uploadError) {
