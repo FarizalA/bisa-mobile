@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, DeviceEventEmitter } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, usePathname } from "expo-router";
 import { Home, Compass, Plus, Briefcase, User } from "lucide-react-native";
@@ -53,7 +53,12 @@ export default function BottomNav({ active }: { active: NavTab }) {
 
   const handlePress = (tab: NavTab, path: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (active === tab) return;
+    if (active === tab) {
+      if (tab === "home") {
+        DeviceEventEmitter.emit("SCROLL_TO_TOP_CLIENT_HOME");
+      }
+      return;
+    }
     try {
       (router as any).navigate(path as any);
     } catch {

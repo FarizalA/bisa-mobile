@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
   TextInput,
   Linking,
+  DeviceEventEmitter,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -57,6 +58,19 @@ export default function PartnerHomePage() {
 
   // Detail job popup di Home (biar Ambil Job langsung muncul di sini, tidak pindah ke Cari Job)
   const [selectedJobHome, setSelectedJobHome] = useState<any | null>(null);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener("SCROLL_TO_TOP_PROVIDER_HOME", () => {
+      try {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      } catch (e) {}
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
 
   // 1. Load Session & User Profile
   useEffect(() => {
@@ -307,6 +321,7 @@ export default function PartnerHomePage() {
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={{ paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
         refreshControl={

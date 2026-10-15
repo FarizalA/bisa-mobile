@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  DeviceEventEmitter,
 } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -116,15 +117,36 @@ export default function ClientHomePage() {
     setRekomendasiVisible(12);
   }, [rekomendasiFilter, selectedCategory]);
 
+  const flashListRef = useRef<any>(null);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener("SCROLL_TO_TOP_CLIENT_HOME", () => {
+      try {
+        flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      } catch (e) {}
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       {/* 1. Header Bar: Fixed di atas */}
       <View className="bg-white px-4 pt-2 pb-2 flex-row items-center justify-between border-b border-gray-100">
-        <Image
-          source={require("../../assets/logo.png")}
-          style={{ width: 95, height: 32 }}
-          contentFit="contain"
-        />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+        >
+          <Image
+            source={require("../../assets/logo.png")}
+            style={{ width: 95, height: 32 }}
+            contentFit="contain"
+          />
+        </TouchableOpacity>
 
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
@@ -160,6 +182,7 @@ export default function ClientHomePage() {
       {/* MASONRY 2-kolom: Feed utama */}
       <View style={{ flex: 1 }}>
         <FlashList
+          ref={flashListRef}
           data={visibleRekomendasi}
           keyExtractor={keyExtractorRekomendasi}
           numColumns={2}
