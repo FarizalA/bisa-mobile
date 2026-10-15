@@ -265,22 +265,8 @@ export default function ClientDirectChatPage() {
 
           <TouchableOpacity
             disabled={chat.payingCod || chat.payingOnline}
-            onPress={() => chat.choosePayment("COD")}
-            className="p-4 rounded-2xl border border-gray-200 flex-row items-center gap-3 mb-3 disabled:opacity-60"
-          >
-            <View className="w-10 h-10 rounded-xl bg-amber-50 items-center justify-center">
-              <Link2 size={18} color="#D97706" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-bold text-gray-900">COD — Bayar Tunai</Text>
-              <Text className="text-xs text-gray-500">Bayar langsung ke Mitra setelah selesai</Text>
-            </View>
-            {chat.payingCod && <ActivityIndicator size="small" color="#D97706" />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            disabled={chat.payingCod || chat.payingOnline}
             onPress={() => chat.choosePayment("MIDTRANS")}
-            className="p-4 rounded-2xl border border-emerald-200 flex-row items-center gap-3 bg-emerald-50/50 disabled:opacity-60"
+            className="p-4 rounded-2xl border border-emerald-200 flex-row items-center gap-3 bg-emerald-50/50 disabled:opacity-60 mb-3"
           >
             <View className="w-10 h-10 rounded-xl bg-emerald-50 items-center justify-center">
               <DollarSign size={18} color="#059669" />
@@ -290,6 +276,20 @@ export default function ClientDirectChatPage() {
               <Text className="text-xs text-gray-500">QRIS / Transfer / GoPay — dana aman</Text>
             </View>
             {chat.payingOnline ? <ActivityIndicator size="small" color="#059669" /> : null}
+          </TouchableOpacity>
+          <TouchableOpacity
+            disabled={chat.payingCod || chat.payingOnline}
+            onPress={() => chat.choosePayment("COD")}
+            className="p-4 rounded-2xl border border-gray-200 flex-row items-center gap-3 disabled:opacity-60"
+          >
+            <View className="w-10 h-10 rounded-xl bg-amber-50 items-center justify-center">
+              <Link2 size={18} color="#D97706" />
+            </View>
+            <View className="flex-1">
+              <Text className="font-bold text-gray-900">COD — Bayar Tunai</Text>
+              <Text className="text-xs text-gray-500">Bayar langsung ke Mitra setelah selesai</Text>
+            </View>
+            {chat.payingCod && <ActivityIndicator size="small" color="#D97706" />}
           </TouchableOpacity>
         </View></View>
       </Modal>
