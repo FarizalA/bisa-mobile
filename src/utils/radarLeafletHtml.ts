@@ -5,7 +5,16 @@ export function generateRadarLeafletHtml(
   providers: any[]
 ): string {
   const provsJson = JSON.stringify(providers);
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif}html,body,#map{height:100%;width:100%;background:#f8fafc}.leaflet-div-icon{background:transparent!important;border:none!important}@keyframes spin{to{transform:rotate(360deg)}}@keyframes superGlow{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.85;transform:scale(1.08)}}@keyframes neonPulse{0%,100%{box-shadow:0 0 6px 1px rgba(56,189,248,.55),0 0 12px 3px rgba(56,189,248,.25)}50%{box-shadow:0 0 8px 2px rgba(56,189,248,.75),0 0 16px 4px rgba(56,189,248,.35)}}.custom-popup .leaflet-popup-content-wrapper{border-radius:18px;padding:0;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,.15)}.custom-popup .leaflet-popup-content{margin:0;width:192px!important}.popup-card{padding:12px;display:flex;flex-direction:column;gap:8px}.leaflet-bottom.leaflet-right{bottom:64px!important}.leaflet-bottom.leaflet-left{bottom:64px!important}<\/style><\/head><body><div id="map"><\/div><script>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif}html,body,#map{height:100%;width:100%;background:#f8fafc}.leaflet-div-icon{background:transparent!important;border:none!important}@keyframes spin{to{transform:rotate(360deg)}}@keyframes superGlow{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.85;transform:scale(1.08)}}@keyframes neonPulse{0%,100%{box-shadow:0 0 6px 1px rgba(56,189,248,.55),0 0 12px 3px rgba(56,189,248,.25)}50%{box-shadow:0 0 8px 2px rgba(56,189,248,.75),0 0 16px 4px rgba(56,189,248,.35)}}.custom-popup .leaflet-popup-content-wrapper{border-radius:18px;padding:0;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,.15)}.custom-popup .leaflet-popup-content{margin:0;width:192px!important}.popup-card{padding:12px;display:flex;flex-direction:column;gap:8px}.leaflet-bottom.leaflet-right{bottom:64px!important}.leaflet-bottom.leaflet-left{bottom:64px!important}
+/* Tahap A: layering tumpukan + badge counter (aman RAM 4GB) */
+.pin-stack-layer{position:absolute;top:-3px;right:-3px;width:36px;height:36px;border-radius:50%;background:#c2410c;border:2px solid #fff;box-shadow:0 2px 5px rgba(15,23,42,.28);opacity:0;transform:scale(.92);pointer-events:none;z-index:0;transition:opacity 150ms ease-out,transform 150ms ease-out}
+.pin-host{position:relative;display:inline-block}
+.pin-host.is-stacked .pin-stack-layer{opacity:1;transform:scale(1)}
+.pin-cluster-badge{position:absolute;top:-5px;right:-6px;z-index:5;min-width:19px;height:19px;padding:0 4px;border-radius:999px;background:#991b1b;border:1.5px solid #fff;color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,.35);display:none;pointer-events:none}
+.pin-host.is-stacked .pin-cluster-badge{display:block}
+.leaflet-marker-icon.is-clustered-hidden{display:none!important}
+body.is-heavy .pin-stack-layer{transition:none!important}
+<\/style><\/head><body><div id="map"><\/div><script>
 var userLat=${lat},userLng=${lng},radiusKm=${radius},providers=${provsJson};
 function zoomForKm(r){ return r>=100?10:r>=25?11:r>=10?12:r>=5?13:r>=3?14:15; }
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([userLat,userLng],zoomForKm(radiusKm));
@@ -27,6 +36,94 @@ function drawRadiusCircle(){
 drawRadiusCircle();
 
 function isBoostActive(lvl,until){if(!lvl||lvl==='standar')return false;if(!until)return true;return new Date(until)>new Date();}
+
+// ===== Tahap A: deteksi tabrakan berbasis piksel (<=40px) + badge counter =====
+// Batas kompleksitas: normal (N<=40) pairwise O(N^2) maks 780 operasi; HEAVY pakai grid 40px O(N).
+// Hard cap N<=MAX_MARKERS agar RAM 4GB tidak tersendat.
+var COLLISION_DIST_PX=40, COLLISION_DIST_SQ=COLLISION_DIST_PX*COLLISION_DIST_PX, DEBOUNCE_MS=120;
+var pinEntries=[]; // { provider, marker, latlng, clusteredInto, followers, point }
+var clusterLeaders={}; // leaderId -> jumlah follower
+
+function pinDistanceKm(p){
+  var d = (typeof p.distance_km==='number') ? p.distance_km : p.distance;
+  return (typeof d==='number') ? d : 999999;
+}
+// Prioritas leader: aktif -> terdekat -> rating tertinggi -> order terbanyak
+function comparePinPriority(a,b){
+  var aa=a.is_active?1:0, ab=b.is_active?1:0; if(aa!==ab) return ab-aa;
+  var da=pinDistanceKm(a), db=pinDistanceKm(b); if(da!==db) return da-db;
+  var ra=Number(a.rating)||0, rb=Number(b.rating)||0; if(ra!==rb) return rb-ra;
+  return (Number(b.total_orders)||0)-(Number(a.total_orders)||0);
+}
+function debounce(fn,delay){var t=null;return function(){var c=this,a=arguments;if(t)clearTimeout(t);t=setTimeout(function(){fn.apply(c,a);},delay);};}
+
+function registerMarker(provider,marker){
+  pinEntries.push({provider:provider,marker:marker,latlng:marker.getLatLng(),clusteredInto:null,followers:[],point:null});
+}
+
+function recomputeCollisions(){
+  var count=pinEntries.length;
+  clusterLeaders={};
+  if(count===0) return;
+  for(var i=0;i<count;i++){
+    var e=pinEntries[i];
+    e.point=map.latLngToContainerPoint(e.latlng);
+    e.clusteredInto=null; e.followers=[];
+  }
+  pinEntries.sort(function(a,b){return comparePinPriority(a.provider,b.provider);});
+
+  if(!HEAVY){
+    for(var a=0;a<count;a++){
+      var leader=pinEntries[a]; if(leader.clusteredInto) continue;
+      for(var b=a+1;b<count;b++){
+        var cand=pinEntries[b]; if(cand.clusteredInto) continue;
+        var dx=leader.point.x-cand.point.x, dy=leader.point.y-cand.point.y;
+        if(dx*dx+dy*dy<=COLLISION_DIST_SQ){ cand.clusteredInto=leader.provider.id; leader.followers.push(cand); }
+      }
+    }
+  } else {
+    var grid={}, cell=COLLISION_DIST_PX;
+    for(var k=0;k<count;k++){
+      var item=pinEntries[k];
+      var gx=Math.floor(item.point.x/cell), gy=Math.floor(item.point.y/cell), found=null;
+      for(var ox=-1;ox<=1&&!found;ox++){for(var oy=-1;oy<=1&&!found;oy++){
+        var bucket=grid[(gx+ox)+':'+(gy+oy)]; if(!bucket) continue;
+        for(var c=0;c<bucket.length;c++){
+          var ld=bucket[c], dX=ld.point.x-item.point.x, dY=ld.point.y-item.point.y;
+          if(dX*dX+dY*dY<=COLLISION_DIST_SQ){ found=ld; break; }
+        }
+      }}
+      if(found){ item.clusteredInto=found.provider.id; found.followers.push(item); }
+      else { var key=gx+':'+gy; if(!grid[key]) grid[key]=[]; grid[key].push(item); }
+    }
+  }
+
+  // Terapkan visual Collapsed: sembunyikan follower, badge +N di leader
+  for(var m=0;m<count;m++){
+    var cur=pinEntries[m];
+    var el=cur.marker.getElement(); if(!el) continue;
+    var host=el.querySelector('.pin-host'); var badge=el.querySelector('.pin-cluster-badge');
+    if(cur.clusteredInto){
+      el.classList.add('is-clustered-hidden');
+      if(host) host.classList.remove('is-stacked');
+    } else {
+      el.classList.remove('is-clustered-hidden');
+      var extra=cur.followers.length;
+      cur.marker.setZIndexOffset((count-m)*10+(extra>0?500:0)+(cur.provider.radar_boost_level==='super'?1000:(cur.provider.radar_boost_level==='menyala'?500:0)));
+      if(extra>0){
+        clusterLeaders[cur.provider.id]=extra;
+        if(host) host.classList.add('is-stacked');
+        if(badge) badge.textContent='+'+extra;
+      } else {
+        if(host) host.classList.remove('is-stacked');
+        if(badge) badge.textContent='';
+      }
+    }
+  }
+}
+var debouncedRecompute=debounce(recomputeCollisions,DEBOUNCE_MS);
+map.on('moveend',debouncedRecompute);
+map.on('zoomend',debouncedRecompute);
 
 // Batas marker supaya HP RAM 4GB tak crash di radius besar.
 var MAX_MARKERS=60;
@@ -62,12 +159,16 @@ function buildPopup(p,bg,fallbackAvatar){
 }
 
 function addMarker(p,layer){
-  if(!p.latitude||!p.longitude) return;
+  if(!p.latitude||!p.longitude) return null;
   var boosted=isBoostActive(p.radar_boost_level,p.radar_boost_until), isInactive=p.is_active===false;
   var b=buildIcon(p,boosted,isInactive);
-  var icon=L.divIcon({html:b.html,className:'',iconSize:b.iconSize,iconAnchor:b.anchor,popupAnchor:[0,-b.anchor[1]+4]});
+  // Tahap A: bungkus pin dengan .pin-host agar bisa diberi layering + badge counter.
+  var html='<div class="pin-host">'+b.html+'<div class="pin-stack-layer"><\/div><div class="pin-cluster-badge">+0<\/div><\/div>';
+  var icon=L.divIcon({html:html,className:'',iconSize:b.iconSize,iconAnchor:b.anchor,popupAnchor:[0,-b.anchor[1]+4]});
   var mk=L.marker([p.latitude,p.longitude],{icon:icon,zIndexOffset:boosted?(p.radar_boost_level==='super'?1000:500):0}).addTo(layer||map);
   mk.bindPopup(buildPopup(p,b.bg,b.fallbackAvatar),{className:'custom-popup'});
+  registerMarker(p,mk);
+  return mk;
 }
 
 // ===== BRIDGE: update peta TANPA reload WebView =====
@@ -76,14 +177,19 @@ var markerLayer=L.layerGroup().addTo(map);
 
 function renderProviders(list){
   markerLayer.clearLayers();
+  pinEntries=[]; clusterLeaders={};
   var arr=(list||[]).slice(0,MAX_MARKERS);
   HEAVY=arr.length>40;
+  try{ document.body.classList.toggle('is-heavy', HEAVY); }catch(e){}
   var sorted=arr.slice().sort(function(a,b){
     var av=isBoostActive(a.radar_boost_level,a.radar_boost_until)?(a.radar_boost_level==='super'?2:1):0;
     var bv=isBoostActive(b.radar_boost_level,b.radar_boost_until)?(b.radar_boost_level==='super'?2:1):0;
     return bv-av;
   });
   sorted.forEach(function(p){ addMarker(p,markerLayer); });
+  recomputeCollisions();
+  // Leaflet menambahkan elemen marker ke DOM secara asinkron; ulang setelah DOM siap.
+  setTimeout(recomputeCollisions, 80);
 }
 
 renderProviders(providers);
