@@ -27,19 +27,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import { MitraUnggulanBadgeIcon } from "./ProviderCard";
-
-const KATEGORI_JASA = [
-  "Semua Jasa",
-  "Service AC & Elektronik",
-  "Kelistrikan",
-  "Tukang & Sanitasi Air",
-  "Pertukangan Bangunan",
-  "Kebersihan Rumah",
-  "Antar & Kurir",
-  "Layanan IT & Komputer",
-  "Otomotif & Bengkel",
-  "Lainnya",
-] as const;
+import { KATEGORI_JASA } from "../../lib/categories";
 
 interface HomeMarketplaceViewProps {
   router: any;

@@ -1,18 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Modal, Platform } from 'react-native';
-
-export const KATEGORI_JASA = [
-  "Semua Jasa",
-  "Service AC & Elektronik",
-  "Kelistrikan",
-  "Tukang & Sanitasi Air",
-  "Pertukangan Bangunan",
-  "Kebersihan Rumah",
-  "Antar & Kurir",
-  "Layanan IT & Komputer",
-  "Otomotif & Bengkel",
-  "Lainnya",
-];
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
+import { KATEGORI_JASA } from '../../lib/categories';
 
 interface RadarFilterModalsProps {
   activeDropdown: 'kategori' | 'radius' | 'harga' | 'rating' | null;
@@ -104,19 +92,21 @@ export const RadarFilterModals: React.FC<RadarFilterModalsProps> = ({
 
       {/* Harga Modal */}
       <Modal visible={activeDropdown === 'harga'} transparent animationType="fade" onRequestClose={() => setActiveDropdown(null)}>
-        <TouchableOpacity activeOpacity={1} onPress={() => setActiveDropdown(null)} className="flex-1 bg-black/30 justify-center items-center px-6">
-          <View className="bg-white rounded-3xl w-full max-w-[320px] p-5 shadow-xl gap-3" style={Platform.OS === 'web' ? ({ width: '100%', maxWidth: 320 } as any) : undefined}>
-            <Text className="text-sm font-bold text-gray-900">Rentang Harga (Rp)</Text>
-            <View className="flex-row items-center gap-2 w-full">
-              <TextInput placeholder="Min" placeholderTextColor="#9ca3af" value={minPrice} onChangeText={setMinPrice} keyboardType="numeric" className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-xs text-gray-900 min-w-0" style={{ flex: 1 }} />
-              <Text className="text-gray-400 font-bold">-</Text>
-              <TextInput placeholder="Max" placeholderTextColor="#9ca3af" value={maxPrice} onChangeText={setMaxPrice} keyboardType="numeric" className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-xs text-gray-900 min-w-0" style={{ flex: 1 }} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => setActiveDropdown(null)} className="flex-1 bg-black/30 justify-center items-center px-6">
+            <View className="bg-white rounded-3xl w-full max-w-[320px] p-5 shadow-xl gap-3" style={Platform.OS === 'web' ? ({ width: '100%', maxWidth: 320 } as any) : undefined}>
+              <Text className="text-sm font-bold text-gray-900">Rentang Harga (Rp)</Text>
+              <View className="flex-row items-center gap-2 w-full">
+                <TextInput placeholder="Min" placeholderTextColor="#9ca3af" value={minPrice} onChangeText={setMinPrice} keyboardType="numeric" className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-xs text-gray-900 min-w-0" style={{ flex: 1 }} />
+                <Text className="text-gray-400 font-bold">-</Text>
+                <TextInput placeholder="Max" placeholderTextColor="#9ca3af" value={maxPrice} onChangeText={setMaxPrice} keyboardType="numeric" className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-xs text-gray-900 min-w-0" style={{ flex: 1 }} />
+              </View>
+              <TouchableOpacity onPress={() => setActiveDropdown(null)} className="bg-[#ff6b00] py-2.5 rounded-xl items-center mt-2">
+                <Text className="text-xs font-bold text-white">Terapkan Filter</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => setActiveDropdown(null)} className="bg-[#ff6b00] py-2.5 rounded-xl items-center mt-2">
-              <Text className="text-xs font-bold text-white">Terapkan Filter</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Rating Modal */}

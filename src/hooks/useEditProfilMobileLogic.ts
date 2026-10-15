@@ -57,7 +57,7 @@ export function useEditProfilMobileLogic() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [alamatSingkat, setAlamatSingkat] = useState("");
-  const [kategori, setKategori] = useState("Digital & IT");
+  const [kategori, setKategori] = useState("Lainnya");
   const [keahlian, setKeahlian] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [faceUrl, setFaceUrl] = useState("");
@@ -125,7 +125,7 @@ export function useEditProfilMobileLogic() {
         setEmail(d.email || "");
         setAddress(d.address || "");
         setAlamatSingkat(d.alamat_singkat || "");
-        setKategori((d as any).kategori || "Digital & IT");
+        setKategori((d as any).kategori || "Lainnya");
         setKeahlian(d.keahlian || "");
         setBasePrice(String(d.base_price ?? 0));
         setFaceUrl(d.face_url || "");

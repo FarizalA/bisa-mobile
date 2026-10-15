@@ -32,6 +32,7 @@ import {
   Loader2,
 } from "lucide-react-native";
 import { useEditProfilMobileLogic } from "../../src/hooks/useEditProfilMobileLogic";
+import { CATEGORY_IDS } from "../../src/lib/categories";
 import { safeBack } from "@/lib/navigation";
 
 function Field({
@@ -208,8 +209,8 @@ export default function EditProfilMobilePage() {
             <View className="mb-3">
               <Text className="text-[12px] font-bold text-gray-700 mb-1.5">Kategori Utama Jasa <Text className="text-orange-600 font-extrabold">*</Text></Text>
               <View className="flex-row flex-wrap gap-1.5">
-                {["Rumah","Antar & Kurir","Service","Kelistrikan","Kebersihan","Digital & IT","Edukasi","Kreatif","Tukang","Otomotif","Lainnya"].map((cat) => {
-                  const active = (l.kategori || "Digital & IT") === cat;
+                {CATEGORY_IDS.map((cat) => {
+                  const active = (l.kategori || "Layanan IT & Komputer") === cat;
                   return (
                     <TouchableOpacity key={cat} onPress={() => l.setKategori(cat)} className={`px-3 py-1.5 rounded-full border ${active ? "bg-[#FF6B00] border-[#FF6B00]" : "bg-white border-gray-200"}`} activeOpacity={0.85}>
                       <Text className={`text-[11px] font-bold ${active ? "text-white" : "text-gray-700"}`}>{cat}</Text>

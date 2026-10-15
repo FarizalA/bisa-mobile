@@ -26,20 +26,25 @@ const LIST_MASA_BERLAKU = [
   { label: "48 Jam", value: 48 },
 ] as const;
 
-const KATEGORI_POSTING = ["Service AC & Elektronik","Kelistrikan","Tukang & Sanitasi Air","Pertukangan Bangunan","Kebersihan Rumah","Antar & Kurir","Layanan IT & Komputer","Otomotif & Bengkel","Lainnya"] as const;
+const KATEGORI_POSTING = ["Service Elektronik","Tukang","Kelistrikan","Kebersihan Rumah","Antar & Kurir","Layanan IT & Komputer","Otomotif & Bengkel","Keamanan","Sopir","Baby Sitter","Joki","Edukasi","Kreatif","Lainnya"] as const;
 const KATEGORI_DESC: Record<string,string> = {
-  "Service AC & Elektronik":"Cuci AC, isi freon, servis TV, dsb.",
+  "Service Elektronik":"Cuci AC, isi freon, servis TV, kulkas, mesin cuci, dsb.",
+  "Tukang":"Bangunan, renovasi, kayu, las, cat, keramik, pipa air, dsb.",
   "Kelistrikan":"Konslet, pasang lampu, instalasi kabel, dsb.",
-  "Tukang & Sanitasi Air":"Pompa, pipa air, keran, tandon, dsb.",
-  "Pertukangan Bangunan":"Bocor atap, cat dinding, keramik, dsb.",
-  "Kebersihan Rumah":"Sapu, pel, cuci piring, setrika, dsb.",
+  "Kebersihan Rumah":"Sapu, pel, cuci piring, setrika, taman, dsb.",
   "Antar & Kurir":"Kirim barang, pindahan rumah, dsb.",
-  "Layanan IT & Komputer":"Servis laptop, instal ulang, jaringan, dsb.",
-  "Otomotif & Bengkel":"Mogok, tambal ban, ganti oli, dsb.",
+  "Layanan IT & Komputer":"Servis laptop/HP, instal ulang, jaringan, CCTV, dsb.",
+  "Otomotif & Bengkel":"Mogok, tambal ban, ganti oli, cuci mobil/motor, dsb.",
+  "Keamanan":"Jaga rumah, satpam, ronda, dsb.",
+  "Sopir":"Sopir harian, antar jemput, dsb.",
+  "Baby Sitter":"Mengasuh anak, nanny, dsb.",
+  "Joki":"Joki game, tugas, dsb.",
+  "Edukasi":"Les privat, mengajar, kursus, dsb.",
+  "Kreatif":"Foto, video, desain, editing konten, dsb.",
   "Lainnya":"Kebutuhan jasa lainnya",
 };
 const KATEGORI_ICON: Record<string,string> = {
-  "Service AC & Elektronik":"ac_unit","Kelistrikan":"bolt","Tukang & Sanitasi Air":"plumbing","Pertukangan Bangunan":"architecture","Kebersihan Rumah":"cleaning_services","Antar & Kurir":"local_shipping","Layanan IT & Komputer":"computer","Otomotif & Bengkel":"two_wheeler","Lainnya":"apps",
+  "Service Elektronik":"ac_unit","Tukang":"architecture","Kelistrikan":"bolt","Kebersihan Rumah":"cleaning_services","Antar & Kurir":"local_shipping","Layanan IT & Komputer":"computer","Otomotif & Bengkel":"two_wheeler","Keamanan":"shield","Sopir":"directions_car","Baby Sitter":"child_care","Joki":"sports_esports","Edukasi":"school","Kreatif":"palette","Lainnya":"apps",
 };
 
 export function usePostingMobileLogic() {

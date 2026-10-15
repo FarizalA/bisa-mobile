@@ -96,35 +96,25 @@ export default function KategoriPage() {
           c.label.toLowerCase() === selectedCategory.toLowerCase()
       );
 
+      const isWord = (text: string, kw: string) => {
+        const k = kw.toLowerCase().trim();
+        if (k.length <= 3) return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+        return text.includes(k);
+      };
+
       result = result.filter((prov) => {
         const sel = selectedCategory.toLowerCase().trim();
         const selLabel = (catObj?.label || "").toLowerCase().trim();
         const selId = (catObj?.id || "").toLowerCase().trim();
         const kat = (prov.kategori || "").toLowerCase().trim();
-        const aliases: Record<string, string[]> = {
-          service: ["service", "service ac", "service ac & elektronik"],
-          kebersihan: ["kebersihan", "bersih-bersih"],
-          otomotif: ["otomotif", "otomotif & bengkel"],
-          tukang: ["tukang", "tukang kilat"],
-        };
-        if (kat) {
-          const a = aliases[sel] || [];
-          if (kat === sel || kat === selLabel || kat === selId || a.includes(kat)) return true;
-          const rev = Object.entries(aliases).find(([_, v]) => v.includes(kat))?.[0];
-          if (rev && rev === sel) return true;
-          return false;
-        }
-        // 2. Fallback data lama tanpa kategori — whole-word untuk keyword pendek
         const keahlian = (prov.keahlian || "").toLowerCase();
         const bio = (prov.keahlian_detail || prov.bio || "").toLowerCase();
         const nama = (prov.name || "").toLowerCase();
-        if (keahlian.includes(sel) || bio.includes(sel)) return true;
+
+        if (kat && (kat === sel || kat === selLabel || kat === selId)) return true;
+
+        // Cocokkan lewat kata kunci kategori (keahlian teks-bebas, nama, bio)
         if (catObj && catObj.keywords.length > 0) {
-          const isWord = (text: string, kw: string) => {
-            const k = kw.toLowerCase().trim();
-            if (k.length <= 3) return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
-            return text.includes(k);
-          };
           return catObj.keywords.some((kw) => isWord(keahlian, kw) || isWord(bio, kw) || isWord(nama, kw));
         }
         return false;

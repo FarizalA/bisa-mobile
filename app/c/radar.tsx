@@ -31,6 +31,7 @@ import { getStoredUser } from "../../src/lib/user-storage";
 import { WebView } from "react-native-webview";
 import { generateRadarLeafletHtml } from "../../src/utils/radarLeafletHtml";
 import { RadarFilterModals } from "../../src/components/radar/RadarFilterModals";
+import { kategoriKeywords } from "../../src/lib/categories";
 
 // MapView hanya di native — web pakai Leaflet iframe 1:1 dengan web ProvidersMap
 // Di-wrap try/catch agar HP tanpa Google Play Services TIDAK force close, fallback ke WebView Leaflet
@@ -52,19 +53,6 @@ if (Platform.OS !== "web") {
   // }
   MapView = null; // Memaksa fallback ke WebView (Leaflet) untuk mencegah Force Close (FC)
 }
-
-const KATEGORI_JASA = [
-  "Semua Jasa",
-  "Service AC & Elektronik",
-  "Kelistrikan",
-  "Tukang & Sanitasi Air",
-  "Pertukangan Bangunan",
-  "Kebersihan Rumah",
-  "Antar & Kurir",
-  "Layanan IT & Komputer",
-  "Otomotif & Bengkel",
-  "Lainnya",
-];
 
 class MapErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
   constructor(p: any) { super(p); this.state = { hasError: false }; }
@@ -208,7 +196,15 @@ export default function RadarPage() {
         } else {
           let q = supabase.from("users_bisa").select("id, name, face_url, latitude, longitude, rating, total_orders, keahlian, base_price, is_trusted, subscription_plan").eq("kyc_status", "Terverifikasi").not("latitude", "is", null).not("longitude", "is", null);
           if (user?.id) q = q.neq("id", user.id);
-          if (filterKategori !== "Semua Jasa") q = q.ilike("keahlian", `%${filterKategori}%`);
+          if (filterKategori !== "Semua Jasa") {
+            // Cocokkan kategori lewat daftar kata kunci (keahlian teks-bebas).
+            const kws = kategoriKeywords(filterKategori);
+            const orClause = [
+              `kategori.eq."${filterKategori}"`,
+              ...kws.map((k) => `keahlian.ilike."%${k}%"`),
+            ].join(",");
+            q = q.or(orClause);
+          }
           const { data: dd } = await q;
           if (dd) setProviders(dd);
         }

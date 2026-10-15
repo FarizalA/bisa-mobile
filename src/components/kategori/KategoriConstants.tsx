@@ -1,6 +1,5 @@
 import {
   LayoutGrid,
-  Home as HomeIcon,
   Bike,
   Snowflake,
   Zap,
@@ -10,6 +9,10 @@ import {
   Palette,
   Hammer,
   Car,
+  CarFront,
+  ShieldCheck,
+  Baby,
+  Gamepad2,
   MoreHorizontal,
 } from "lucide-react-native";
 import Svg, { Path, Circle } from "react-native-svg";
@@ -17,16 +20,19 @@ import React from "react";
 
 export const CATEGORIES = [
   { id: "Semua", label: "Semua Jasa", icon: LayoutGrid, keywords: [] as string[] },
-  { id: "Rumah", label: "Rumah", icon: HomeIcon, keywords: ["rumah", "bangunan", "tukang", "sanitasi", "pipa", "atap", "cat"] },
-  { id: "Antar & Kurir", label: "Antar & Kurir", icon: Bike, keywords: ["antar", "kurir", "kirim", "pindahan", "ojek", "logistik"] },
-  { id: "Service", label: "Service", icon: Snowflake, keywords: ["service ac", "service", "ac", "elektronik", "freon", "tv", "kulkas", "mesin cuci", "servis"] },
-  { id: "Kelistrikan", label: "Kelistrikan", icon: Zap, keywords: ["listrik", "kabel", "lampu", "konslet", "panel", "saklar"] },
-  { id: "Kebersihan", label: "Kebersihan", icon: Sparkles, keywords: ["kebersihan", "bersih", "cuci", "pel", "sapu", "setrika", "cleaning", "laundry"] },
-  { id: "Digital & IT", label: "Digital & IT", icon: Laptop, keywords: ["digital", "it", "laptop", "komputer", "web", "desain", "koding", "software"] },
-  { id: "Edukasi", label: "Edukasi", icon: GraduationCap, keywords: ["edukasi", "les", "tutor", "mengajar", "kursus", "guru", "privat"] },
-  { id: "Kreatif", label: "Kreatif", icon: Palette, keywords: ["kreatif", "foto", "video", "desain", "seni", "editor", "konten"] },
-  { id: "Tukang", label: "Tukang", icon: Hammer, keywords: ["tukang", "bangunan", "renovasi", "kayu", "las", "cat", "keramik", "batu"] },
-  { id: "Otomotif", label: "Otomotif", icon: Car, keywords: ["otomotif", "bengkel", "motor", "mobil", "ban", "oli"] },
+  { id: "Service Elektronik", label: "Service Elektronik", icon: Snowflake, keywords: ["service", "servis", "elektronik", "ac", "kulkas", "mesin cuci", "tv", "freon"] },
+  { id: "Tukang", label: "Tukang", icon: Hammer, keywords: ["tukang", "bangunan", "renovasi", "kayu", "las", "cat", "keramik", "batu", "atap", "plafon", "pipa", "sanitasi", "ledeng", "rumah"] },
+  { id: "Kelistrikan", label: "Kelistrikan", icon: Zap, keywords: ["listrik", "kabel", "lampu", "konslet", "panel", "saklar", "instalasi"] },
+  { id: "Kebersihan Rumah", label: "Kebersihan Rumah", icon: Sparkles, keywords: ["kebersihan", "bersih", "cuci", "pel", "sapu", "setrika", "cleaning", "laundry", "taman", "kebun"] },
+  { id: "Antar & Kurir", label: "Antar & Kurir", icon: Bike, keywords: ["antar", "kurir", "kirim", "pindahan", "ojek", "logistik", "angkut"] },
+  { id: "Layanan IT & Komputer", label: "Layanan IT & Komputer", icon: Laptop, keywords: ["it", "laptop", "komputer", "hp", "web", "koding", "software", "cctv", "jaringan", "wifi", "digital"] },
+  { id: "Otomotif & Bengkel", label: "Otomotif & Bengkel", icon: Car, keywords: ["otomotif", "bengkel", "motor", "mobil", "ban", "oli", "montir", "cuci mobil", "cuci motor"] },
+  { id: "Keamanan", label: "Keamanan", icon: ShieldCheck, keywords: ["keamanan", "satpam", "security", "jaga", "ronda"] },
+  { id: "Sopir", label: "Sopir", icon: CarFront, keywords: ["sopir", "driver", "mengemudi", "antar jemput"] },
+  { id: "Baby Sitter", label: "Baby Sitter", icon: Baby, keywords: ["baby sitter", "babysitter", "asuh", "anak", "pengasuh", "neni"] },
+  { id: "Joki", label: "Joki", icon: Gamepad2, keywords: ["joki", "game", "tugas", "titip"] },
+  { id: "Edukasi", label: "Edukasi", icon: GraduationCap, keywords: ["edukasi", "les", "tutor", "mengajar", "kursus", "guru", "privat", "belajar"] },
+  { id: "Kreatif", label: "Kreatif", icon: Palette, keywords: ["kreatif", "foto", "video", "desain", "seni", "editor", "konten", "musik"] },
   { id: "Lainnya", label: "Lainnya", icon: MoreHorizontal, keywords: ["lainnya", "lain"] },
 ] as const;
 
