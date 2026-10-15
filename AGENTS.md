@@ -39,3 +39,14 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## JANGAN DIUBAH TANPA KONFIRMASI PEMILIK PRODUK
+
+Keputusan berikut sudah final. Jangan ubah meski tampak "salah" atau "bisa diperbaiki".
+
+- **Default `role` pengguna saat daftar = `mitra`.** Semua pendaftar adalah mitra dan boleh mencari kerja maupun mencari pekerja. JANGAN ubah jadi `client`. Hanya admin yang boleh mengubah `role`; aplikasi tidak boleh mengubahnya sendiri.
+- `role` nyaris tak bermakna — `client` hanya sisa data lama. Jangan bangun logika baru bergantung pada `role`.
+- Kode di `app/c/*` dan `app/p/*` adalah pemisah **mode** (cari kerja vs cari pekerja), bukan tipe akun. Satu user dapat memakai keduanya kapan saja.
+- **KYC:** KTP & swafoto verifikasi ada di bucket private `kyc_dokumen` (kolom `ktp_url` & `kyc_selfie_url` menyimpan nama file). JANGAN jadikan publik. `face_url` = foto profil publik (`profile_photos/profiles/`), boleh diganti user. Foto lampiran postingan tetap di bucket publik `berkas_kyc`.
+- **`app/_layout.tsx` root:** JANGAN tambah elemen sibling di luar `<Stack>` (pernah menyebabkan crash).
+
