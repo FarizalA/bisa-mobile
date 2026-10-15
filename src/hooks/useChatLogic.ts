@@ -513,7 +513,7 @@ export function useChatLogic(conversationId: string) {
         });
       } else {
         await Linking.openURL(targetUrl);
-        try { showPopup({ title: "Menunggu Pembayaran", message: "Selesaikan pembayaran di halaman Midtrans. Status akan otomatis diperbarui via webhook.", type: "info" }); } catch {}
+        try { showPopup({ title: "Menunggu Pembayaran", message: "Selesaikan pembayaran di halaman Midtrans. Status akan otomatis diperbarui.", type: "info" }); } catch {}
       }
       // Jangan langsung fetchAll — webhook Midtrans akan ubah status ke escrow_held / sedang_dikerjakan secara realtime
     } catch (e: any) {
