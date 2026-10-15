@@ -466,9 +466,14 @@ export function useChatLogic(conversationId: string) {
         const backendUrl = rawApi || "https://bisa-admin.vercel.app";
         const url = `${backendUrl}/api/payment/snap`;
         const stored: any = await getStoredUser().catch(() => null);
+        const { getSupabaseToken } = await import("../lib/auth");
+        const token = await getSupabaseToken();
         const res = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             jobId: Number(payJobId),
             agreedPrice: priceNum,

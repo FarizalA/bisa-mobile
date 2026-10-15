@@ -276,9 +276,14 @@ export default function AktivitasPage() {
         const backendUrl = rawApi || "https://bisa-admin.vercel.app";
         const url = `${backendUrl}/api/payment/snap`;
 
+        const { getSupabaseToken } = await import("../../src/lib/auth");
+        const token = await getSupabaseToken();
         const res = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             jobId: Number(job.id),
             agreedPrice: rawAgreed,
