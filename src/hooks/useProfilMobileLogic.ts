@@ -32,11 +32,20 @@ export function useProfilMobileLogic(role: "mitra" | "client") {
   const [notifPromo, setNotifPromo] = useState(false);
 
   // Reverse Geocoding with OpenStreetMap Nominatim
+  // Catatan: Nominatim memblokir request tanpa User-Agent (403) — header WAJIB.
   const reverseGeocode = async (lat: number, lon: number) => {
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
+        {
+          headers: {
+            "User-Agent": "BISA-Mobile/1.0 (https://bisa-admin.vercel.app)",
+            Referer: "https://bisa-admin.vercel.app",
+            Accept: "application/json",
+          },
+        }
       );
+      if (!res.ok) return;
       const data = await res.json();
       if (data && data.address) {
         const sub =

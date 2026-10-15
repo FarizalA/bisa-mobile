@@ -8,6 +8,7 @@ import * as Location from "expo-location";
 import { supabase } from "../../src/lib/supabase";
 import { setStoredUser } from "../../src/lib/user-storage";
 import { compressImageDetailed, compressImageWithBase64, base64ToUint8Array } from "../../src/lib/imageCompression";
+import { reverseGeocode } from "../../src/lib/geocode";
 import DaftarHeader from "../../src/components/daftar/DaftarHeader";
 import DaftarProgressCard from "../../src/components/daftar/DaftarProgressCard";
 import DaftarBiodataSection from "../../src/components/daftar/DaftarBiodataSection";
@@ -85,29 +86,9 @@ export default function DaftarPage() {
     if (!latitude || !longitude) return;
     setIsGeocoding(true);
     const t = setTimeout(async () => {
-      try {
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-        );
-        const data = await resp.json();
-        if (data && data.address) {
-          const sub =
-            data.address.suburb ||
-            data.address.village ||
-            data.address.town ||
-            data.address.city_district ||
-            data.address.county ||
-            data.address.city ||
-            "";
-          if (sub) {
-            setAlamatSingkat(sub);
-          }
-        }
-      } catch (err) {
-        console.warn("Geocoding error:", err);
-      } finally {
-        setIsGeocoding(false);
-      }
+      const sub = await reverseGeocode(latitude, longitude);
+      if (sub) setAlamatSingkat(sub);
+      setIsGeocoding(false);
     }, 800);
     return () => clearTimeout(t);
   }, [latitude, longitude]);

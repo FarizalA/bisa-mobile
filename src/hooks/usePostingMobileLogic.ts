@@ -175,7 +175,14 @@ export function usePostingMobileLogic() {
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-          { headers: { "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7" } }
+          {
+            headers: {
+              "User-Agent": "BISA-Mobile/1.0 (https://bisa-admin.vercel.app)",
+              Referer: "https://bisa-admin.vercel.app",
+              Accept: "application/json",
+              "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            },
+          }
         );
         const data = await res.json();
         if (data?.address) {

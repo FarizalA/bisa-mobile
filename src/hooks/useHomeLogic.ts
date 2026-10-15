@@ -102,7 +102,14 @@ export function useHomeLogic() {
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
                 const resp = await fetch(
                   `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.coords.latitude}&lon=${loc.coords.longitude}`,
-                  { signal: controller.signal }
+                  {
+                    signal: controller.signal,
+                    headers: {
+                      "User-Agent": "BISA-Mobile/1.0 (https://bisa-admin.vercel.app)",
+                      Referer: "https://bisa-admin.vercel.app",
+                      Accept: "application/json",
+                    },
+                  }
                 );
                 const data = await resp.json();
                 clearTimeout(timeoutId);
