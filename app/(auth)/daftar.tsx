@@ -203,7 +203,7 @@ export default function DaftarPage() {
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from(bucket)
-        .upload(fileName, payload, {
+        .upload(bucket === "profile_photos" ? `profiles/${fileName}` : fileName, payload, {
           contentType,
           // Nama file selalu unik (timestamp + acak), jadi tidak perlu upsert.
           // upsert memicu operasi UPDATE yang tidak diizinkan policy RLS
