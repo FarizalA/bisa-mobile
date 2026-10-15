@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { Alert } from "react-native";
-import { supabase } from "../lib/supabase";
 import { validateEmail, validatePassword } from "../lib/validations";
 import { setStoredUser } from "../lib/user-storage";
 import { setBisaToken } from "../lib/bisa-token";
@@ -56,26 +55,20 @@ export function useAuthForm(mode: "login" | "daftar") {
           router.replace("/waiting" as any);
         }
       } else {
-        // DAFTAR — insert ke users_bisa (flow simple untuk mobile dulu)
+        // DAFTAR — lewat backend (password di-hash di server, bukan plaintext di client).
         const normalizedEmail = email.trim().toLowerCase();
-        const dup = await supabase.from("users_bisa").select("id").ilike("email", normalizedEmail).limit(1);
-        if (dup.data && dup.data.length > 0) {
-          setServerError("Email sudah terdaftar. Silakan langsung masuk.");
-          return;
+        const res = await fetch(`${API_URL}/api/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normalizedEmail, password, name: normalizedEmail.split("@")[0] }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || "Gagal mendaftar. Coba lagi.");
         }
-        const { data, error } = await supabase
-          .from("users_bisa")
-          .insert([
-            {
-              email: normalizedEmail,
-              password,
-              name: normalizedEmail.split("@")[0],
-              kyc_status: "Menunggu",
-            },
-          ])
-          .select();
-        if (error) throw new Error(error.message);
-        const newUser: any = data?.[0];
+
+        if (data.token) await setBisaToken(data.token);
+        const newUser: any = data.user;
         if (newUser) {
           const safe: any = { ...newUser };
           delete safe.password;
